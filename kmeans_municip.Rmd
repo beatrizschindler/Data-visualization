@@ -1,0 +1,2545 @@
+---
+title: "Agrupamento dos Municípios - K means"
+author: "Beatriz Schindler"
+date: "4/12/2020"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r message=FALSE, warning=FALSE}
+#library(factoextra)
+#library(NbClust)
+library(tidyverse)
+library(readr)
+library(readxl)
+library(dplyr)
+library(psych)
+library(ggplot2)
+library(gridExtra)
+library(kableExtra)
+library(stringr)
+library(gridExtra)
+library(ggpubr)
+```
+
+```{r eval=FALSE, include=FALSE}
+# Vinculando dados aos indicadores de contexto
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+load("indic_municip_SINAN_agrup_restr.rda")
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+## após alterações na forma de calcular incidência e criação de um novo indicador de contexto - outros desfechos
+indic_munic_SINAN_restr4 <- read_csv("indic_munic_SINAN_restr4.csv")
+df_final4 <- dplyr::select(df_final4, ID_MUNIC_A, clusters_restr4)
+
+df_final4 <- merge(indic_munic_SINAN_restr4, df_final4, by = "ID_MUNIC_A")
+rm(indic_munic_SINAN_restr4)
+```
+
+
+```{r proporcao pobres, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+proporcao_pobres2010 <- read_delim("contexto_Banco_proporcao_pobres_Brasil_2010.csv", 
+    ";", escape_double = FALSE, locale = locale(decimal_mark = ","), 
+    trim_ws = TRUE, skip = 3)
+names(proporcao_pobres2010)[1] <- "Municipio"
+#head(proporcao_pobres2010$Municipio)
+proporcao_pobres2010$ID <- proporcao_pobres2010$Municipio %>% str_sub(1,6)
+proporcao_pobres2010$Municipio <- NULL
+names(proporcao_pobres2010) <- c("renda_menor_1/2SM_%", "renda_menor_1/4SM_%", "renda_menor_1/2SM", "renda_menor_1/4SM", "pop_total_2010", "ID")
+proporcao_pobres2010 <- dplyr::select(proporcao_pobres2010, -pop_total_2010)
+df_final4 <- merge(df_final4, proporcao_pobres2010, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+
+rm(proporcao_pobres2010)
+
+```
+
+```{r desemprego, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+Desemprego2010 <- read_delim("contexto_Banco_taxaDesemprego_Brasil_2010.csv",
+    ";", escape_double = FALSE, locale = locale(decimal_mark = ","), 
+    trim_ws = TRUE, skip = 3)
+names(Desemprego2010)[1] <- "Municipio"
+Desemprego2010$ID <- Desemprego2010$Municipio %>% str_sub(1,6)
+
+Desemprego2010$Municipio <- NULL
+names(Desemprego2010) <- c("txdesemprego16ae+_2010", "popdesocup16ae+_2010", "popeconomativa16ae+_2010", "ID")
+df_final4 <- merge(df_final4, Desemprego2010, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+rm(Desemprego2010)
+```
+
+```{r IDHM, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+IDHM2010 <- read_excel("contexto_IDHM_Brasil_2010.xlsx")
+IDHM2010 <- dplyr::select(IDHM2010, -Município, -Ano)
+df_final4 <- merge(df_final4, IDHM2010, by.x = "ID_MUNIC_A", by.y = "Município com 6 dígitos", all.x = T)
+rm(IDHM2010)
+```
+
+```{r cob ab 2017, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+Cobertura_AB_Dez2017 <- read_excel("contexto_Cobertura-AB-TODOS OS MUNICIPIOS-Dezembro de 2017.xlsx")
+Cobertura_AB_Dez2017 <- dplyr::select(Cobertura_AB_Dez2017, IBGE, `Cobertura ESF`, `Cobertura AB`)
+names(Cobertura_AB_Dez2017) <- c("IBGE", "cobESF2017", "cobAB2017")
+df_final4 <- merge(df_final4, Cobertura_AB_Dez2017, by.x = "ID_MUNIC_A", by.y = "IBGE")
+
+rm(Cobertura_AB_Dez2017)
+```
+
+```{r cob ab 2018, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+Cobertura_AB_Dez2018 <- read_excel("contexto_Cobertura-AB-TODOS OS MUNICIPIOS-Dezembro de 2018.xlsx")
+Cobertura_AB_Dez2018 <- dplyr::select(Cobertura_AB_Dez2018, IBGE, `Cobertura ESF`, `Cobertura AB`, Macrorregião)
+names(Cobertura_AB_Dez2018) <- c("IBGE", "cobESF2018", "cobAB2018", "Região")
+df_final4 <- merge(df_final4, Cobertura_AB_Dez2018, by.x = "ID_MUNIC_A", by.y = "IBGE")
+
+rm(Cobertura_AB_Dez2018)
+```
+
+```{r eval=FALSE, include=FALSE}
+library(readr)
+contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010 <- read_delim("contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010.csv", 
+    ";", escape_double = FALSE, locale = locale(decimal_mark = ","), 
+    trim_ws = TRUE, skip = 3)
+
+names(contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010)[1] <- "Municipio"
+
+contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010$ID <- contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010$Municipio %>% str_sub(1,6)
+
+contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010$Municipio <- NULL
+df_final4 <- merge(df_final4, contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+
+rm(contexto_Banco_TaxaAnalfabetismo_Pop15anosoumais_2010)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+library(readxl)
+aids <- read_excel("contexto_CasosIdentificados_aids_2015a2018.xlsx", 
+    skip = 3)
+aids <- dplyr::select(aids, Municipio=`Município (Res)`, casos_aids = Total)
+aids$Municipio <- aids$Municipio %>%  str_sub(1, 6)
+
+df_final4 <- merge(df_final4, aids, by.x = "ID_MUNIC_A", by.y = "Municipio", all.x=T)
+df_final4$casos_aids[is.na(df_final4$casos_aids)]=0
+
+df_final4 <- df_final4 %>% mutate(taxa_aids= (casos_aids/pop_total)*100000)
+rm(aids)
+```
+
+```{r eval=FALSE, include=FALSE}
+#TMI = n obitos infantis (<1ano)/num de nascidos vivos*1000, depois dividir por quatro
+
+obitos <- read_delim("contexto_Obitos infantis 2015-2018.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE, 
+    skip = 3)
+
+names(obitos) <- c("municipio", "obitos")
+obitos$municipio <- obitos$municipio %>% str_sub(1,6) 
+df_final4 <- merge(df_final4, obitos, by.x = "ID_MUNIC_A", by.y = "municipio", all.x = T)
+df_final4$obitos[which(is.na(df_final4$obitos))] <- 0
+
+nascidosvivos <- read_delim("contexto_Nascidos_vivos_2015_2018.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE, 
+    skip = 3)
+names(nascidosvivos) <- c("municipio", "n2015", "n2016", "n2017", "n2018", "Total")
+nascidosvivos$ID <- nascidosvivos$municipio %>% str_sub(1,6)
+nascidosvivos <- nascidosvivos[,-c(1:5)]
+df_final4 <- merge(df_final4, nascidosvivos, by.x = "ID_MUNIC_A", by.y = "ID")
+which(is.na(df_final4$Total))
+
+df_final4$TMI <- (df_final4$obitos / df_final4$Total) * 1000
+
+rm(nascidosvivos)
+rm(obitos)
+```
+
+```{r eval=FALSE, include=FALSE}
+#gini
+gini <- read_delim("contexto_ginibr.csv", 
+    ";", escape_double = FALSE, col_types = cols(`2010` = col_number()), 
+    locale = locale(decimal_mark = ","), 
+    trim_ws = TRUE, skip = 2)
+
+gini <- gini[,-c(2,3)]
+names(gini) <- c("municipio", "indice_gini")
+
+gini$ID <- gini$municipio %>% str_sub(1,6)
+df_final4 <- merge(df_final4, gini, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+
+rm(gini)
+```
+
+```{r eval=FALSE, include=FALSE}
+popurbana2010 <- read_excel("contexto_popUrbana_Censo_2010_municipios.xlsx", 
+    skip = 6)
+popurbana2010 <- popurbana2010[,-c(1,4,5,6,7,9)]
+names(popurbana2010) <- c("ID", "Nome_municipio", "Urbana", "Rural")
+
+popurbana2010$ID <- popurbana2010$ID %>% str_sub(1,6)
+popurbana2010 <- popurbana2010 %>% dplyr::select(-Nome_municipio)
+
+df_final4 <- merge(df_final4, popurbana2010, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+
+rm(popurbana2010)
+```
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+save(df_final4, file = "indic_municip_SINAN_agrup_restr_contexto.rda")
+```
+
+```{r include=FALSE}
+load("indic_municip_SINAN_agrup_restr_contexto.rda")
+df_final4$IDHM <- as.numeric(df_final4$IDHM)
+levels(df_final4$clusters_restr4)
+df_final4$clusters_restr4 <- ordered(df_final4$clusters_restr4,
+                         levels = c("bom", "regular", "ruim"))
+levels(df_final4$clusters_restr4)
+levels(df_final4$clusters_restr4) <- c("A", "B", "C")
+levels(df_final4$clusters_restr4)
+```
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+#esquisse::esquisser(df_final4)
+
+#library(ggplot2)
+
+g1 <- ggplot(df_final4) +
+ aes(x = "", y = p_CL_tbpulm_csnv) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ", y = " ", title = "Proporção de confirmação laboratorial", subtitle = " entre casos novos de TB pulmonar") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g2 <- ggplot(df_final4) +
+ aes(x = "", y = p_cont_ex) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ", y = " ", title = "Proporção de contatos examinados") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g3 <- ggplot(df_final4) +
+ aes(x = "", y = p_TDO_tbpulm_csnv) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ", y = " ", title = "Proporção de realização de TDO", subtitle = "entre casos novos de TB pulmonar") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g4 <- ggplot(df_final4) +
+ aes(x = "", y = p_ex_HIV_csnv) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ", y = " ", title = "Proporção de realização de testes de HIV", subtitle = "entre casos novos") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g5 <- ggplot(df_final4) +
+ aes(x = "", y = p_ab_CL_tbpulm_csnv) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ", y = " ", title = "Proporção de abandono de tratamento", subtitle = "entre casos novos de TB pulmonar \ncom confirmação laboratorial") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g6 <- ggplot(df_final4) +
+ aes(x = "", y = p_cura_CL_tbpulm_csnv) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ",  y = " ", title = "Proporção de cura", subtitle = "entre casos novos de TB pulmonar \ncom confirmação laboratorial") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g7 <- ggplot(df_final4) +
+ aes(x = "", y = p_bacil_1m) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ",  y = " ", title = "Proporção de realização de basciloscopia \nde primeiro mês") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+g8 <- ggplot(df_final4) +
+ aes(x = "", y = letali) +
+ geom_boxplot(fill = "#ff9554") +
+ labs(x = " ",  y = " ", title = "Letalidade") +
+ theme_minimal() +
+ facet_wrap(vars(clusters_restr4))
+
+grid.arrange(g1,g2,g3,g4,g5,g6,g8, ncol=2)
+gg1 <- ggarrange(g1, g2, g3, g4, g5, g6, g8, labels = c("a.", "b.", "c.", "d.", "e.", "f.", "g."), ncol = 2, nrow = 4)
+
+annotate_figure(gg1, top = text_grob(" ", color = "black", face = "bold", size = 20))
+
+```
+
+# Variáveis de contexto
+```{r eval=FALSE, include=FALSE}
+
+
+g1 <- df_final4 %>%
+ filter(incid >= 0L & incid <= 320L) %>% 
+    ggplot() +
+ aes(x = clusters_restr4, y = incid, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+labs(x = " ", y = "Taxa de incidência de TB \na cada 100.000 hab.-ano", title = "") 
+
+g2 <- df_final4 %>%
+ filter(mortali >= 0L & mortali <= 20) %>% 
+ ggplot() +
+ aes(x = clusters_restr4, y = mortali, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "Taxa de mortalidade por TB \na cada 100.000 hab.-ano", title = "") 
+
+g3 <- df_final4 %>%
+    ggplot() +
+ aes(x = clusters_restr4, y = taxa_aids, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+labs(x = " ", y = "Taxa de detecção de aids \na cada 100.000 hab.-ano", title = "") 
+
+g4 <- ggplot(df_final4) +
+ aes(x = clusters_restr4, y = log(pop_total/4), fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "Log da população média", title = "")
+
+g5 <- ggplot(df_final4) +
+ aes(x = clusters_restr4, y = IDHM, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "IDHM", title = "") 
+
+g6 <- ggplot(df_final4) +
+ aes(x= clusters_restr4, y = Taxa_de_analfabetismo, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "Taxa de analfabetismo (%)", title = "") 
+
+ggplot(df_final4) +
+ aes(x= clusters_restr4, y = `txdesemprego16ae+_2010`, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "Taxa de desemprego (%)", title = "") 
+
+g7 <- df_final4 %>%
+ filter( `renda_menor_1/2SM_%` <= 100) %>% 
+    ggplot() +
+ aes(x= clusters_restr4, y = `renda_menor_1/2SM_%`, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "População com renda \ninferior a 1/2 SM (%)", title = "") 
+
+ggplot(df_final4) +
+ aes(x = clusters_restr4, y = cobAB2018, fill = clusters_restr4) +
+ geom_violin(trim=T, lwd=0.2, col="#474A51") +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "Cobertura da AB (%)", title = "") 
+
+g8 <- ggplot(df_final4) +
+ aes(x = clusters_restr4, y = cobESF2018, fill = clusters_restr4) +
+ geom_violin(trim=T) +
+ geom_boxplot(width=0.04) +  
+ theme_minimal() +
+ theme(legend.position = "none") +
+ scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+ labs(x = " ", y = "Cobertura da ESF (%)", title = "") 
+
+
+df_final4 %>% 
+  ggplot() +
+  aes(x = clusters_restr4, y = TMI, fill = clusters_restr4) +
+  geom_violin(trim = T) +
+  geom_boxplot(width = 0.04) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+  labs(x = " ", y = "Taxa de mortalidade infantil", title = "")
+
+
+df_final4 %>% 
+  ggplot() +
+  aes(x = clusters_restr4, y = indice_gini, fill = clusters_restr4) +
+  geom_violin(trim = T) +
+  geom_boxplot(width = 0.04) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+  labs(x = " ", y = "Índice de Gini")
+
+g9 <- df_final4 %>% 
+  ggplot() +
+  aes(x = clusters_restr4, y = Urbana, fill = clusters_restr4) +
+  geom_violin(trim = T) +
+  geom_boxplot(width = 0.04) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+  labs(x = " ", y = "População urbana (%)")
+
+
+  
+grid.arrange(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, ncol=2)
+gg1 <- ggarrange(g1, g2, g3, g4, g5, g6, g7, g8, g9, labels = c("a.", "b.", "c.", "d.", "e.", "f.", "g.", "h.", "i."), ncol=3, nrow=3)
+
+annotate_figure(gg1, top = text_grob(" ", color = "black", face = "bold", size = 20))
+
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+banco <- dplyr::select(df_final4, ID_MUNIC_A, Região, UF, `Nome da UF`, `Nome do Município`, População = pop_total, Grupo = clusters_restr4, casos_novos, cs_nv_TB_pulm)
+capitais <- c("Rio Branco", "Maceió", "Macapá", "Manaus", "Salvador", "Fortaleza", "Brasília", "Vitória", "Goiânia", "São Luís", "Cuiabá", "Campo Grande", "Belo Horizonte", "Belém", "João Pessoa", "Curitiba", "Recife", "Teresina", "Rio de Janeiro", "Natal", "Porto Alegre", "Porto Velho", "Boa Vista", "Florianópolis", "São Paulo", "Aracaju", "Palmas")
+capitais <- filter(banco, `Nome do Município` %in% capitais) %>% filter(ID_MUNIC_A != 250190 & ID_MUNIC_A != 411760) 
+capitais %>% dplyr::select(-`População`, -casos_novos, -cs_nv_TB_pulm) %>% kable(caption = "Enquadramento das capitais no agrupamento") %>%  kable_classic(fixed_thead = T)
+
+n_capitais <- capitais %>% 
+    summarise(n=n(), 
+              n_A_bom = sum(Grupo == "A"), 
+              perc_A_bom = (n_A_bom/n)*100,
+              n_B_regular = sum(Grupo == "B"), 
+              perc_B_regular = (n_B_regular/n)*100,
+              n_C_ruim = sum(Grupo == "C"), 
+              perc_C_ruim = (n_C_ruim/n)*100 )
+
+banco_mapa <- banco %>% group_by(UF, `Nome da UF`) %>% 
+    summarise(n=n(), 
+              n_A_bom = sum(Grupo == "A"), perc_A_bom = (n_A_bom/n)*100,
+              n_B_regular = sum(Grupo == "B"), perc_B_regular = (n_B_regular/n)*100,
+              n_C_ruim = sum(Grupo == "C"), perc_C_ruim = (n_C_ruim/n)*100,
+              qtd_casos_novos = sum(casos_novos),
+              qtd_cs_nv_TB_pulm = sum(cs_nv_TB_pulm))
+
+write_csv(banco_mapa, file = "banco_mapa.csv")
+
+banco$Região <- as.factor(banco$Região)
+#paste(table(banco$Região), " (", round(prop.table(table(banco$Região))*100,2), "%)", sep = "")
+regiao <- banco %>% group_by(Grupo) %>% summarise(n=n(), 
+                                        n_CENTRO_OESTE = sum(Região == "CENTRO-OESTE"),
+                                        perc_CENTRO_OESTE = (n_CENTRO_OESTE/n)*100,
+                                        n_NORDESTE = sum(Região == "NORDESTE"),
+                                        perc_NORDESTE = (n_NORDESTE/n)*100,
+                                        n_NORTE = sum(Região == "NORTE"),
+                                        perc_NORTE = (n_NORTE/n)*100,
+                                        n_SUDESTE = sum(Região == "SUDESTE"),
+                                        perc_SUDESTE = (n_SUDESTE/n)*100,
+                                        n_SUL = sum(Região == "SUL"),
+                                        perc_SUL = (n_SUL/n)*100
+                                        
+                                        ) 
+tab_regiao <- banco %>%  group_by(`Região`, Grupo) %>% summarise(n=n())
+tab_regiao<- spread(tab_regiao, key = Grupo, value = n) %>% mutate(Total = sum(A,B,C), pA= (A/Total)*100, pB= (B/Total)*100, pC= (C/Total)*100) %>% dplyr::select(Região, A, pA, B, pB, C, pC, Total) 
+tab_regiao %>% kable(caption = "Quantidade e percentual de municípios por região e grupo", digits = 2) %>% kable_classic(full_width = F)
+
+tab_casosnovos <- banco %>%  group_by(`Região`, Grupo) %>% summarise(n = sum(casos_novos))
+tab_casosnovos <- spread(tab_casosnovos, key = Grupo, value = n) %>% mutate(Total = sum(A,B,C), pA= (A/Total)*100, pB= (B/Total)*100, pC= (C/Total*100)) %>% dplyr::select(Região, A, pA, B, pB, C, pC, Total) 
+tab_casosnovos %>% kable(caption = "Quantidade e percentual de casos novos por região e grupo", digits = 2) %>% kable_classic(full_width = F)
+
+tab_csnvtbp <- banco %>%  group_by(`Região`, Grupo) %>% summarise(n = sum(cs_nv_TB_pulm))
+tab_csnvtbp <- spread(tab_csnvtbp, key = Grupo, value = n) %>% mutate(Total = sum(A,B,C), pA= (A/Total)*100, pB= (B/Total)*100, pC= (C/Total*100)) %>% dplyr::select(Região, A, pA, B, pB, C, pC, Total) 
+tab_csnvtbp %>% kable(caption = "Quantidade e percentual de casos novos de TBP por região e grupo", digits = 2) %>% kable_classic(full_width = F)
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+df_final4 <- df_final4 %>% mutate(pop_total = pop_total/4)
+descr <- psych::describe.by(df_final4[,-c(1,5,11,13)], group = df_final4$clusters_restr4)
+ruim <- descr$C
+ruim <- as.data.frame(ruim)
+ruim <- ruim %>% dplyr::select(n, mean, sd, median, min, max)
+ruim <- rownames_to_column(ruim, "Indicadores")
+ruim <- ruim %>% filter(Indicadores %in% c("casos_novos", "num_obit_TB", "cs_nv_TB_pulm", "p_desfecho_outros", "renda_menor_1/2SM_%", "txdesemprego16ae+_2010", "IDHM", "cobESF2018", "cobAB2018", "Taxa_de_analfabetismo", "pop_total", "incid", "mortali", "taxa_aids", "TMI", "indice_gini", "Urbana"))
+ruim <- column_to_rownames(ruim, var = "Indicadores")
+#ruim
+
+#ruim <- rownames_to_column(ruim, var = "rowname")
+#ruim <- mutate(ruim, cv = sd / mean )
+#ruim <- column_to_rownames(ruim, var = "rowname")
+#ruim[,c(1:3,7)]
+#ruim[,2:3]
+
+
+regular <- descr$B
+regular <- as.data.frame(regular)
+regular <- regular %>% dplyr::select(n, mean, sd, median, min, max)
+regular <- rownames_to_column(regular, "Indicadores")
+regular <- regular %>% filter(Indicadores %in% c("casos_novos", "num_obit_TB", "cs_nv_TB_pulm", "renda_menor_1/2SM_%", "txdesemprego16ae+_2010", "IDHM", "cobESF2018", "cobAB2018", "Taxa_de_analfabetismo", "pop_total", "incid", "mortali", "taxa_aids", "TMI", "indice_gini", "Urbana"))
+regular <- column_to_rownames(regular, var = "Indicadores")
+#regular
+#regular <- rownames_to_column(regular, var = "rowname")
+#regular <- mutate(regular, cv = sd / mean )
+#regular <- column_to_rownames(regular, var = "rowname")
+#regular[,c(1:3,7)]
+#regular[,2:3]
+
+bom <- descr$A
+bom <- as.data.frame(bom)
+bom <- bom %>% dplyr::select(n, mean, sd, median, min, max)
+bom <- rownames_to_column(bom, "Indicadores")
+bom <- bom %>% filter(Indicadores %in% c("casos_novos", "num_obit_TB", "cs_nv_TB_pulm","renda_menor_1/2SM_%", "txdesemprego16ae+_2010", "IDHM", "cobESF2018", "cobAB2018", "Taxa_de_analfabetismo", "pop_total", "incid", "mortali", "taxa_aids", "TMI", "indice_gini", "Urbana"))
+bom <- column_to_rownames(bom, var = "Indicadores")
+#bom
+#bom <- rownames_to_column(bom, var = "rowname")
+#bom <- mutate(bom, cv = sd / mean )
+#bom <- column_to_rownames(bom, var = "rowname")
+#bom[,c(1:3,7)]
+#bom[,2:3]
+
+tab <- describe(df_final4)
+tab <- as.data.frame(tab)
+tab <- tab %>% dplyr::select(n, mean, sd, median, min, max) 
+tab <- rownames_to_column(tab, "Indicadores")
+tab <- tab %>% filter(Indicadores %in% c("casos_novos", "num_obit_TB", "cs_nv_TB_pulm", "renda_menor_1/2SM_%", "txdesemprego16ae+_2010", "IDHM", "cobESF2018", "cobAB2018", "Taxa_de_analfabetismo", "pop_total", "incid", "mortali", "taxa_aids", "TMI", "indice_gini", "Urbana"))
+tab <- column_to_rownames(tab, var = "Indicadores")
+#tab
+
+#tab <- tab[-c(3:9, 11:13, 16:20, 22:23, 26, 28:29, 31:32, 34), ]
+#tab <- tab[,c(2,3,4,5,8,9)]
+
+tab_centroide <- cbind(bom[,c(2:3)], regular[,c(2:3)], ruim[,c(2:3)], tab[,2:3])
+
+row.names(tab_centroide)
+row.names(tab_centroide) <- c("Casos novos", "Óbitos por TB", "Casos novos de TB pulmonar",   "Média da população municipal no período", "Taxa de incidência de TB", "Taxa de Mortalidade por TB",  "População com renda inferior a 1/2 SM", "Taxa de desemprego",  "IDHM", "Cobertura da ESF", "Cobertura da AB", "Taxa de analfabetismo",   "Taxa de detecção de aids", "Taxa de mortalidade infantil", "Indice de Gini", "Percentual da população em área urbana")
+
+kable(tab_centroide[-c(1:3),], caption = "Indicadores de Contexto, por grupo e total", digits = 3) %>% kable_classic() %>% add_header_above(c(" " = 1, "A - Bom \n(n = 1337)" = 2, "B - Regular \n(n = 967)" = 2, "C - Ruim \n(n = 541)" = 2, "Total \n(n = 2845)"=2))
+
+```
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#testes de hipóteses das variáveis de contexto
+
+## Teste SHAPIRO-WILK - normalidade
+
+s1 <- shapiro.test(df_final4$pop_total)
+s2 <- shapiro.test(df_final4$IDHM)
+s3 <- shapiro.test(df_final4$Taxa_de_analfabetismo)
+#s4 <- shapiro.test(df_final4$`txdesemprego16ae+_2010`) rejeita normalidade tbm
+s4 <- shapiro.test(df_final4$`renda_menor_1/2SM_%`)
+s5 <- shapiro.test(df_final4$cobAB2018)
+s6 <- shapiro.test(df_final4$cobESF2018)
+s7 <- shapiro.test(df_final4$taxa_aids)
+s8 <- shapiro.test(df_final4$incid)
+s9 <- shapiro.test(df_final4$mortali)
+s10 <- shapiro.test(df_final4$TMI)
+s11 <- shapiro.test(df_final4$indice_gini)
+s12 <- shapiro.test(df_final4$Urbana)
+#s13 <- shapiro.test(df_final4$p_desfecho_outros)
+
+resultados <- rbind(s1$p.value, 
+                    s2$p.value, 
+                    s3$p.value, 
+                    s4$p.value, 
+                    s5$p.value, 
+                    s6$p.value, 
+                    s7$p.value,
+                    s8$p.value,
+                    s9$p.value,
+                    s10$p.value,
+                    s11$p.value,
+                    s12$p.value) 
+
+nomes <- c("População municipal", "IDHM", "Taxa de analfabetismo", # "Taxa de desemprego",  
+           "População com renda inferior a 1/2 SM", "Cobertura da AB",  "Cobertura da ESF",  "Taxa de detecção de aids", "Taxa de incidência de TB", "Taxa de Mortalidade por TB",            "Taxa de mortalidade infantil", "Indice de Gini", "População em área urbana"#, "Outros desfechos")
+)
+
+colnames(resultados) <- "p-valor"
+row.names(resultados) <- nomes
+resultados [resultados < 0.001] <- "<0.001"
+kableExtra::kable(resultados, caption = "Resultados dos Testes de Shapiro-Wilk - Indicadores de Contexto" , digits = 100, format.args = list(scientific = TRUE)) %>% kableExtra::kable_classic()
+
+
+#rejeição unânime da normalidade
+
+## Teste KRUSKAL-WALLIS (anova não paramétrica)
+
+k1 <- kruskal.test(pop_total~clusters_restr4, data = df_final4)
+k2 <- kruskal.test(IDHM~clusters_restr4, data = df_final4)
+k3 <- kruskal.test(Taxa_de_analfabetismo~clusters_restr4, data = df_final4)
+#
+k4 <- kruskal.test(`txdesemprego16ae+_2010`~clusters_restr4, data = df_final4)
+#
+k4 <- kruskal.test(`renda_menor_1/2SM_%`~clusters_restr4, data = df_final4)
+k5 <- kruskal.test(cobAB2018~clusters_restr4, data = df_final4)
+k6 <- kruskal.test(cobESF2018~clusters_restr4, data = df_final4)
+k7 <- kruskal.test(taxa_aids~clusters_restr4, data = df_final4)
+k8 <- kruskal.test(incid~clusters_restr4, data = df_final4)
+k9 <- kruskal.test(mortali~clusters_restr4, data = df_final4)
+k10 <- kruskal.test(TMI~clusters_restr4, data = df_final4)
+k11 <- kruskal.test(indice_gini~clusters_restr4, data = df_final4)
+k12 <- kruskal.test(Urbana~clusters_restr4, data = df_final4)
+#k13 <- kruskal.test(p_desfecho_outros~clusters_restr4, data = df_final4)
+
+resultados <- rbind(k1$p.value, 
+      k2$p.value, 
+      k3$p.value, 
+      k4$p.value, 
+      k5$p.value, 
+      k6$p.value, 
+      k7$p.value,
+      k8$p.value,
+      k9$p.value,
+      k10$p.value,
+      k11$p.value,
+      k12$p.value#,
+      #k13$p.value
+      ) 
+      
+
+colnames(resultados) <- "p-valor"
+row.names(resultados) <- nomes
+resultados[resultados < 0.001] <- "<0.001"
+kableExtra::kable(resultados, caption = "  Resultados dos Testes de Kruskal-Wallis - Indicadores de Contexto", digits = 100, format.args = list(scientific = TRUE) ) %>% kableExtra::kable_classic()
+
+#Rejeição de H0: há pelo menos uma diferença entre os grupos para todos os indicadores de contexto, exceto TMI
+
+## Nemenyi - (substituto não paramétrico do teste de Tuckey)
+
+library(PMCMR)
+
+t1 <- posthoc.kruskal.nemenyi.test(pop_total~clusters_restr4, data = df_final4)
+t2 <- posthoc.kruskal.nemenyi.test(IDHM~clusters_restr4, data = df_final4)
+t3 <- posthoc.kruskal.nemenyi.test(Taxa_de_analfabetismo~clusters_restr4, data = df_final4)
+##
+t4 <- posthoc.kruskal.nemenyi.test(`txdesemprego16ae+_2010`~clusters_restr4, data = df_final4)
+##
+t4 <- posthoc.kruskal.nemenyi.test(`renda_menor_1/2SM_%`~clusters_restr4, data = df_final4)
+t5 <- posthoc.kruskal.nemenyi.test(cobAB2018~clusters_restr4, data = df_final4)
+t6 <- posthoc.kruskal.nemenyi.test(cobESF2018~clusters_restr4, data = df_final4)
+t7 <- posthoc.kruskal.nemenyi.test(taxa_aids~clusters_restr4, data = df_final4)
+t8 <- posthoc.kruskal.nemenyi.test(incid/4~clusters_restr4, data = df_final4)
+t9 <- posthoc.kruskal.nemenyi.test(mortali/4~clusters_restr4, data = df_final4)
+t10 <- posthoc.kruskal.nemenyi.test(TMI~clusters_restr4, data = df_final4)
+t11 <- posthoc.kruskal.nemenyi.test(indice_gini~clusters_restr4, data = df_final4)
+t12 <- posthoc.kruskal.nemenyi.test(Urbana~clusters_restr4, data = df_final4)
+#t13 <- posthoc.kruskal.nemenyi.test(p_desfecho_outros~clusters_restr4, data = df_final4)
+
+
+resultados <- rbind(t1$p.value, 
+      t2$p.value, 
+      t3$p.value, 
+      t4$p.value, 
+      t5$p.value, 
+      t6$p.value, 
+      t7$p.value,
+      t8$p.value,
+      t9$p.value,
+      t10$p.value,
+      t11$p.value,
+      t12$p.value
+      ) 
+      
+
+kableExtra::kable(resultados, caption = "  Resultados dos Testes de Nemenyi - Indicadores de Contexto" , digits = 100, format.args = list(scientific = TRUE)) %>% kableExtra::kable_classic(fixed_thead = T) %>% pack_rows("População municipal", 1, 2) %>% pack_rows("IDHM", 3, 4) %>% pack_rows("Taxa de analfabetismo", 5, 6) %>%  pack_rows("População com renda inferior a 1/2 SM", 7, 8) %>% pack_rows("Cobertura da AB", 9, 10) %>%  pack_rows("Cobertura da ESF", 11, 12) %>%  pack_rows("Taxa de detecção de aids", 13, 14) %>%  pack_rows("Taxa de incidência de TB", 15, 16) %>%  pack_rows("Taxa de Mortalidade por TB", 17, 18) %>%  pack_rows("Taxa de mortalidade infantil", 19, 20) %>% pack_rows("Indice de Gini", 21,22) %>% pack_rows("População urbana", 23,24) #%>% pack_rows("Outros desfechos", 23,24)
+
+resultados[resultados<0.001 & !is.na(resultados)] <- "<0.001"
+
+#kableExtra::kable(resultados, caption = "  Resultados dos Testes de Nemenyi - Indicadores de Contexto" , digits = 100, format.args = list(scientific = TRUE)) %>% kableExtra::kable_classic(fixed_thead = T) %>% pack_rows("População municipal", 1, 2) %>% pack_rows("IDHM", 3, 4) %>% pack_rows("Taxa de analfabetismo", 5, 6) %>%  pack_rows("População com renda inferior a 1/2 SM", 7, 8) %>% pack_rows("Cobertura da AB", 9, 10) %>%  pack_rows("Cobertura da ESF", 11, 12) %>%  pack_rows("Taxa de detecção de aids", 13, 14) %>%  pack_rows("Taxa de incidência de TB", 15, 16) %>%  pack_rows("Taxa de Mortalidade por TB", 17, 18) %>%  pack_rows("Taxa de mortalidade infantil", 19, 20) %>% pack_rows("Indice de Gini", 21,22) %>% pack_rows("População urbana", 23,24)
+
+A <- c(NA, 0)
+p.valores <- rbind(A, t1$p.value,
+A, t2$p.value,
+A, t3$p.value,
+A, t4$p.value,
+A, t5$p.value,
+A, t6$p.value,
+A, t7$p.value,
+A, t8$p.value,
+A, t9$p.value,
+A, t10$p.value,
+A, t11$p.value,
+A, t12$p.value)
+
+p.valores[c(1,4,7,10,13,16,19,22,25,28,31,34),2] <- p.valores[c(1+1,4+1,7+1,10+1,13+1,16+1,19+1,22+1,25+1,28+1,31+1, 34+1),1]
+
+C <- 1:33
+p.valores <- cbind(p.valores, C)
+p.valores[c(3,6,9,12,15,18,21,24,27,30,33,36),3] <- NA
+p.valores[c(3-2,6-2,9-2,12-2,15-2,18-2,21-2,24-2,27-2,30-2,33-2, 36-2),3] <- p.valores[c(3,6,9,12,15,18,21,24,27,30,33, 36),1]
+p.valores[c(3-1,6-1,9-1,12-1,15-1,18-1,21-1,24-1,27-1,30-1,33-1, 36-1),3] <- p.valores[c(3,6,9,12,15,18,21,24,27,30,33, 36),2]
+
+options(knitr.kable.NA = "-")
+
+#kableExtra::kable(p.valores, caption = "  Resultados dos Testes de Nemenyi - Indicadores de Contexto" , digits = 100, format.args = list(scientific = TRUE)) %>% kableExtra::kable_classic() %>% pack_rows("População municipal", 1, 3) %>% pack_rows("IDHM", 4, 6) %>% pack_rows("Taxa de analfabetismo", 7, 9) %>% pack_rows("População com renda inferior a 1/2 SM", 10, 12) %>% pack_rows("Cobertura da AB", 13, 15) %>% pack_rows("Cobertura da ESF", 16, 18) %>%  pack_rows("Taxa de detecção de aids", 19, 21) %>%  pack_rows("Taxa de incidência de TB", 22, 24) %>%  pack_rows("Taxa de Mortalidade por TB", 25, 27) %>%  pack_rows("Taxa de mortalidade infantil", 28, 30) %>%  pack_rows("Indice de Gini", 31, 33) %>% pack_rows("População urbana", 34,36) #%>% pack_rows(, 37,39)
+
+p.valores <- round(p.valores,4)
+p.valores[p.valores<0.001 & !is.na(p.valores)] <- "<0.001 *"
+
+p.valores[p.valores<0.05 & !is.na(p.valores) & p.valores>0.001] <- paste(p.valores[p.valores<0.05 & !is.na(p.valores) & p.valores>0.001], "*")
+
+
+
+
+options(knitr.kable.NA = "-")
+
+kableExtra::kable(p.valores, caption = "  Resultados dos Testes de Nemenyi - Indicadores de Contexto" , digits = 100, format.args = list(scientific = TRUE)) %>% kableExtra::kable_classic(fixed_thead = T, full_width = F) %>% pack_rows("População municipal", 1, 3) %>% pack_rows("IDHM", 4, 6) %>% pack_rows("Taxa de analfabetismo", 7, 9) %>% pack_rows("População com renda inferior a 1/2 SM", 10, 12) %>% pack_rows("Cobertura da AB", 13, 15) %>% pack_rows("Cobertura da ESF", 16, 18) %>%  pack_rows("Taxa de detecção de aids", 19, 21) %>%  pack_rows("Taxa de incidência de TB", 22, 24) %>%  pack_rows("Taxa de Mortalidade por TB", 25, 27) %>%  pack_rows("Taxa de mortalidade infantil", 28, 30) %>%  pack_rows("Indice de Gini", 31, 33) %>% pack_rows("População urbana", 34,36) #%>% pack_rows(, 37,39)
+
+
+
+
+
+#kableExtra::kable(p.valores, caption = "  Resultados dos Testes de Nemenyi - Indicadores de Contexto" , digits = 100, format.args = list(scientific = TRUE)) %>% kableExtra::kable_classic() %>% pack_rows("População municipal", 1, 3) %>% pack_rows("IDHM", 4, 6) %>% pack_rows("Taxa de analfabetismo", 7, 9) %>% pack_rows("Taxa de desemprego", 10, 12) %>% pack_rows("População com renda inferior a 1/2 SM", 13, 15) %>% pack_rows("Cobertura da AB", 16, 18) %>%  pack_rows("Cobertura da ESF", 19, 21) %>%  pack_rows("Taxa de detecção de aids", 22, 24) %>%  pack_rows("Taxa de incidência de TB", 25, 27) %>%  pack_rows("Taxa de Mortalidade por TB", 28, 30) %>%  pack_rows("Índice de Gini", 31, 33)
+
+
+```
+
+
+```{r eval=FALSE, include=FALSE}
+df_final4 %>% group_by(grupo = clusters_restr4) %>% summarise(n = n(), casos_nvs = sum(casos_novos, na.rm=T), casos_nvs_TBP = sum(cs_nv_TB_pulm, na.rm = T)) %>% mutate(perc_cs_nv = (casos_nvs/sum(casos_nvs))*100, perc_cs_nvTBP = (casos_nvs_TBP /sum(casos_nvs_TBP ) )*100) %>% kable(caption = "Concentração de casos novos e casos novos de TBP por grupo") %>% kable_classic()
+
+```
+
+
+# POR PORTE POPULACIONAL 
+
+```{r eval=FALSE, include=FALSE}
+df_final4 <- df_final4 %>% mutate(estrato_pop = cut(pop_total, breaks = c(-Inf, 20000, 50000, 100000, Inf), labels = c("0 a 20 mil", "20 a 50 mil", "50 a 100 mil", "acima de 100 mil")))
+estratos <- df_final4 %>% group_by(clusters_restr4) %>% summarise(n = n(), n_0a20 = sum(estrato_pop == "0 a 20 mil"),
+                                                      p_0a20 = n_0a20/n,
+                                                      n_20a50 = sum(estrato_pop == "20 a 50 mil"),
+                                                      p_20a50 = n_20a50/n,
+                                                      n_50a100 = sum(estrato_pop == "50 a 100 mil"), 
+                                                      p_50a100 = n_50a100/n,
+                                                      n_100mais = sum(estrato_pop == "100 a 200 mil"), 
+                                                      p_100mais = n_100mais/n
+                                                      
+                                                      ) %>% as.data.frame()
+estratos <- t(estratos)
+colnames(estratos) <- estratos[1,]
+estratos <- estratos[-1,]
+
+estratos %>% kable(caption = "Quantidade de municípios segundo estrato populacional, por grupo") %>% kable_classic()
+
+###
+df_final4 <- df_final4 %>% mutate(estrato_pop = cut(pop_total, breaks = c(-Inf, 20000, 50000, 100000, Inf), labels = c("0 a 20 mil", "20 a 50 mil", "50 a 100 mil", "acima de 100 mil")))
+
+a <- rbind(table(df_final4$estrato_pop),
+table(df_final4$estrato_pop) %>% prop.table()*100 )
+row.names(a) <- c("Freq.", "Freq. Rel.")
+a[2,] <- round(a[2,],2)
+a[2,] <- paste0(a[2,],"%")
+t(a) %>% kable(digits=2, full_width = F) %>% kable_classic()
+
+###
+df_final4 <- df_final4 %>% mutate(estrato_pop2 = cut(pop_total, breaks = c(-Inf, 25000, 50000, 100000, Inf), labels = c("0 a 25 mil", "25 a 50 mil", "50 a 100 mil", "acima de 100 mil")))
+
+a <- rbind(table(df_final4$estrato_pop2),
+table(df_final4$estrato_pop2) %>% prop.table()*100 )
+row.names(a) <- c("Freq.", "Freq. Rel.")
+a[2,] <- round(a[2,],2)
+a[2,] <- paste0(a[2,],"%")
+t(a) %>% kable(digits=2, full_width = F) %>% kable_classic()
+
+###
+df_final4 <- df_final4 %>% mutate(estrato_pop3 = cut(pop_total, breaks = c(-Inf, 50000, 100000, Inf), labels = c("0 a 50 mil", "50 a 100 mil", "acima de 100 mil")))
+
+a <- rbind(table(df_final4$estrato_pop3),
+table(df_final4$estrato_pop3) %>% prop.table()*100 )
+row.names(a) <- c("Freq.", "Freq. Rel.")
+a[2,] <- round(a[2,],2)
+a[2,] <- paste0(a[2,],"%")
+t(a) %>% kable(digits=2, full_width = F) %>% kable_classic()
+
+### 
+df_final4 <- df_final4 %>% mutate(estrato_pop4 = cut(pop_total, breaks = c(-Inf, 50000, 100000, 300000, Inf), labels = c("0 a 50 mil", "50 a 100 mil",  "100 a 300 mil", "acima de 300 mil")))
+
+a <- rbind(table(df_final4$estrato_pop4),
+table(df_final4$estrato_pop4) %>% prop.table()*100 )
+row.names(a) <- c("Freq.", "Freq. Rel.")
+a[2,] <- round(a[2,],2)
+a[2,] <- paste0(a[2,],"%")
+t(a) %>% kable(digits=2, full_width = F) %>% kable_classic()
+
+### 
+df_final4 <- df_final4 %>% mutate(estrato_pop5 = cut(pop_total, breaks = c(-Inf, 50000, 100000, 300000, 500000, Inf), labels = c("0 a 50 mil", "50 a 100 mil",  "100 a 300 mil", "300 a 500 mil","acima de 500 mil")))
+
+a <- rbind(table(df_final4$estrato_pop5),
+table(df_final4$estrato_pop5) %>% prop.table()*100 )
+row.names(a) <- c("Freq.", "Freq. Rel.")
+a[2,] <- round(a[2,],2)
+a[2,] <- paste0(a[2,],"%")
+t(a) %>% kable(digits=2, full_width = F) %>% kable_classic()
+
+### 
+df_final4 <- df_final4 %>% mutate(estrato_pop6 = cut(pop_total, breaks = c(-Inf, 50000, 100000, 300000,  Inf), labels = c("abaixo de 50 mil", "50 a 100 mil",  "100 a 300 mil", "acima de 300 mil")))
+
+a <- rbind(table(df_final4$estrato_pop6),
+table(df_final4$estrato_pop6) %>% prop.table()*100 )
+row.names(a) <- c("Freq.", "Freq. Rel.")
+a[2,] <- round(a[2,],2)
+a[2,] <- paste0(a[2,],"%")
+t(a) %>% kable(digits=2, full_width = F) %>% kable_classic()
+
+```
+
+
+```{r eval=FALSE, include=FALSE}
+descr <- df_final4 %>% select(casos_novos, cs_nv_TB_pulm, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, letali, estrato_pop4) %>% psych::describe.by(group = df_final4$estrato_pop6)
+
+descr$`abaixo de 50 mil`[-10,c(2:5, 8:10)] %>% kable(caption = "abaixo de 50 mil", digits = 2) %>% kable_classic(full_width = F, "striped")
+descr$`50 a 100 mil`[-10,c(2:5, 8:10)] %>% kable(caption = "50 a 100 mil", digits = 2) %>% kable_classic(full_width = F, "striped")
+descr$`100 a 300 mil`[-10,c(2:5, 8:10)] %>% kable(caption = "100 a 300 mil", digits = 2) %>% kable_classic(full_width = F, "striped")
+descr$`acima de 300 mil`[-10,c(2:5, 8:10)] %>% kable(caption = "acima de 300 mil", digits = 2) %>% kable_classic(full_width = F, "striped")
+```
+
+
+```{r eval=FALSE, include=FALSE}
+#esquisse::esquisser(df_final4)
+
+
+library(ggplot2)
+
+
+g1 <- ggplot(df_final4) +
+ aes(x = "", y = p_CL_tbpulm_csnv, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g2 <- ggplot(df_final4) +
+  aes(x = "", y = p_CL_tbpulm_csnv, fill = estrato_pop5) +
+  geom_boxplot() +
+  scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop5)) +
+ theme(legend.position = "none")
+
+
+g3 <- ggplot(df_final4) +
+ aes(x = "", y = p_cont_ex, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g4 <- ggplot(df_final4) +
+ aes(x = "", y = p_cont_ex, fill = estrato_pop5) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop5)) +
+ theme(legend.position = "none")
+
+
+g5 <- ggplot(df_final4) +
+ aes(x = "", y = p_ex_HIV_csnv, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g6 <- ggplot(df_final4) +
+ aes(x = "", y = p_ex_HIV_csnv, fill = estrato_pop5) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop5)) +
+ theme(legend.position = "none")
+
+
+g7 <- ggplot(df_final4) +
+ aes(x = "", y = p_TDO_tbpulm_csnv, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g8 <- ggplot(df_final4) +
+ aes(x = "", y = p_TDO_tbpulm_csnv, fill = estrato_pop5) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop5)) +
+ theme(legend.position = "none")
+
+
+g9 <- ggplot(df_final4) +
+ aes(x = "", y = p_ab_CL_tbpulm_csnv, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g10 <- ggplot(df_final4) +
+  aes(x = "", y = p_ab_CL_tbpulm_csnv, fill = estrato_pop5) +
+  geom_boxplot() +
+  scale_fill_hue() +
+  labs(x="") +
+  theme_minimal() +
+  facet_grid(vars(), vars(estrato_pop5)) +
+  theme(legend.position = "none")
+
+
+
+g11 <- ggplot(df_final4) +
+ aes(x = "", y = p_cura_CL_tbpulm_csnv, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g12 <- ggplot(df_final4) +
+ aes(x = "", y = p_cura_CL_tbpulm_csnv, fill = estrato_pop5) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop5)) +
+ theme(legend.position = "none")
+
+
+g13 <- ggplot(df_final4) +
+ aes(x = "", y = letali, fill = estrato_pop) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop)) +
+ theme(legend.position = "none")
+
+
+g14 <- ggplot(df_final4) +
+ aes(x = "", y = letali, fill = estrato_pop5) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x="") +
+ theme_minimal() +
+ facet_grid(vars(), vars(estrato_pop5)) +
+ theme(legend.position = "none")
+
+
+grid.arrange(g1, g2)
+grid.arrange(g3, g4)
+grid.arrange(g5, g6)
+grid.arrange(g7, g8)
+grid.arrange(g9, g10)
+grid.arrange(g11, g12)
+grid.arrange(g13, g14)
+
+#filter(df_final4, pop_total<100000) %>% summarise(mean(casos_novos), sum(casos_novos))
+#filter(df_final4, pop_total >100000 & pop_total < 300000) %>% summarise(mean(casos_novos), sum(casos_novos))
+#filter(df_final4, pop_total > 300000) %>% summarise(sum(casos_novos), mean(casos_novos), min(casos_novos), max(casos_novos), median(casos_novos))
+
+
+```
+
+```{r eval=FALSE, include=FALSE}
+aux <- filter(df_final4, estrato_pop6 == "abaixo de 50 mil") %>% select(ID_MUNIC_A, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv#, letali
+                      )
+
+row.names(aux) <- aux$ID_MUNIC_A
+aux <- aux[,-1]
+
+library(factoextra)
+library(NbClust)
+
+
+fviz_nbclust(aux, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+abaixo50 <- aux %>% kmeans(centers = 3, nstart = 500)
+abaixo50$centers
+
+banco_clusters1 <- as.data.frame(abaixo50$cluster)
+names(banco_clusters1) <- "cluster"
+banco_clusters1$ID <- as.numeric(row.names(banco_clusters1))
+banco_clusters1$cluster <- as.factor(banco_clusters1$cluster)
+levels(banco_clusters1$cluster) <- c("C", "B", "A")
+
+abaixo50 <- aux %>% kmeans(centers = 2, nstart = 500)
+abaixo50$centers
+
+banco_clusters1$cluster2 <- abaixo50$cluster
+banco_clusters1$cluster2 <- as.factor(banco_clusters1$cluster2) 
+levels(banco_clusters1$cluster2) <- c("B", "A")
+
+abaixo50 <- aux %>% kmeans(centers = 2, nstart = 500)
+abaixo50$centers
+
+```
+
+```{r eval=FALSE, include=FALSE}
+aux <- filter(df_final4, estrato_pop6 == "50 a 100 mil") %>% select(ID_MUNIC_A, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv#, letali
+                      )
+
+row.names(aux) <- aux$ID_MUNIC_A
+aux <- aux[,-1]
+
+fviz_nbclust(aux, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+de50a100 <- aux %>% kmeans(centers = 3, nstart = 500)
+de50a100$centers
+
+banco_clusters2 <- as.data.frame(de50a100$cluster)
+names(banco_clusters2) <- "cluster"
+banco_clusters2$ID <- as.numeric(row.names(banco_clusters2))
+banco_clusters2$cluster <- as.factor(banco_clusters2$cluster)
+levels(banco_clusters2$cluster) <- c("C", "A", "B")
+
+de50a100 <- aux %>% kmeans(centers = 2, nstart = 500)
+de50a100$centers
+
+banco_clusters2$cluster2 <- de50a100$cluster
+banco_clusters2$cluster2 <- as.factor(banco_clusters2$cluster2) 
+levels(banco_clusters2$cluster2) <- c("A", "B")
+```
+
+```{r eval=FALSE, include=FALSE}
+aux <- filter(df_final4, estrato_pop6 == "100 a 300 mil") %>% select(ID_MUNIC_A, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv#, letali
+                      )
+
+row.names(aux) <- aux$ID_MUNIC_A
+aux <- aux[,-1]
+
+fviz_nbclust(aux, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+de100a300 <- aux %>% kmeans(centers = 3, nstart = 500)
+de100a300$centers
+
+banco_clusters3 <- as.data.frame(de100a300$cluster)
+names(banco_clusters3) <- "cluster"
+banco_clusters3$ID <- as.numeric(row.names(banco_clusters3))
+banco_clusters3$cluster <- as.factor(banco_clusters3$cluster)
+levels(banco_clusters3$cluster) <- c("B", "C", "A")
+
+de100a300 <- aux %>% kmeans(centers = 2, nstart = 500)
+de100a300$centers
+
+banco_clusters3$cluster2 <- de100a300$cluster
+banco_clusters3$cluster2 <- as.factor(banco_clusters3$cluster2) 
+levels(banco_clusters3$cluster2) <- c("A", "B")
+```
+
+```{r eval=FALSE, include=FALSE}
+aux <- filter(df_final4, estrato_pop6 == "acima de 300 mil") %>% select(ID_MUNIC_A, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv#, letali
+                      )
+
+row.names(aux) <- aux$ID_MUNIC_A
+aux <- aux[,-1]
+
+fviz_nbclust(aux, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+mais300 <- aux %>% kmeans(centers = 3, nstart = 500)
+mais300$centers
+
+banco_clusters4 <- as.data.frame(mais300$cluster)
+names(banco_clusters4) <- "cluster"
+banco_clusters4$ID <- as.numeric(row.names(banco_clusters4))
+banco_clusters4$cluster <- as.factor(banco_clusters4$cluster)
+levels(banco_clusters4$cluster) <- c( "A", "C", "B")
+
+mais300 <- aux %>% kmeans(centers = 2, nstart = 500)
+mais300$centers
+
+banco_clusters4$cluster2 <- mais300$cluster
+banco_clusters4$cluster2 <- as.factor(banco_clusters4$cluster2) 
+levels(banco_clusters4$cluster2) <- c("A", "B")
+
+```
+
+```{r eval=FALSE, include=FALSE}
+banco_clusters <- rbind(banco_clusters1, banco_clusters2, banco_clusters3, banco_clusters4)
+df_final4 <- merge(df_final4, banco_clusters, by.x = "ID_MUNIC_A", by.y = "ID")
+
+rm(banco_clusters, banco_clusters1, banco_clusters2, banco_clusters3, banco_clusters4)
+rm(abaixo50, de50a100, de100a300, mais300)
+rm(aux)
+
+save(df_final4, file = "indic_municip_SINAN_agrup_restr_contexto_PORTE.rda")
+
+```
+
+```{r message=FALSE, warning=FALSE}
+load("indic_municip_SINAN_agrup_restr_contexto_PORTE.rda")
+levels(df_final4$cluster)
+df_final4$cluster <- ordered(df_final4$cluster,
+                         levels = c("A", "B", "C"))
+levels(df_final4$cluster)
+
+```
+```{r}
+library(readr)
+comorb <- read_csv("indic_comorb_munic_SINAN.csv")
+comorb <- select(comorb, ID_MUNIC_A, pop_vuln, TB_HIV, TB_DB, drogas, NU_IDADE_N, casos_novos)
+df_final4 <- merge(df_final4, comorb, by = "ID_MUNIC_A")
+all.equal(df_final4$casos_novos.x, df_final4$casos_novos.y)
+
+df_final4 <- df_final4 %>% mutate(p.pop_vuln = pop_vuln/casos_novos.y*100,
+                                  p.TB_HIV = TB_HIV/casos_novos.y*100,
+                                  p.TB_DB = TB_DB/casos_novos.y*100,
+                                  p.drogas = drogas/casos_novos.y*100)
+rm(comorb)
+df_final4$casos_novos.y <- NULL
+names(df_final4)[2] <- "casos_novos"
+summary(df_final4$p.pop_vuln)
+```
+
+
+```{r eval=FALSE, warning=FALSE, include=FALSE}
+renda_per_capita <- read_delim("rendaDomiciliar_perCapita_2010.csv", 
+     ";", escape_double = FALSE, locale = locale(decimal_mark = ","), 
+     trim_ws = TRUE, skip = 3)
+names(renda_per_capita)<-c("ID", "renda_per_capita")
+
+renda_per_capita$ID <- renda_per_capita$ID %>% str_sub(1,6)
+df_final4 <- merge(df_final4, renda_per_capita, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+rm(renda_per_capita)
+
+```
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+nomes <- c("Confirmação laboratorial dentre casos novos de TB pulmonar (%)", "Contatos examinados dentre os contatos identificados (%)",             "Realização de exame de HIV em casos novos (%)",        
+                    "Realização de TDO em casos novos de TB pulmonar (%)",     "Abandono de tratamento dentre casos novos de TB pulmonar com CL (%)",   "Cura dentre casos novos de TB pulmonar com CL (%)", "População com renda menos que 1/2 SM (%)", "IDHM", "TMI", "Incidência", "Mortalidade por TB", "Taxa de analfabetismo", "Índice de Gini", "Taxa de desemprego", "Cobertura AB", "Cobertura ESF", "Renda per capita")
+
+
+tab <- df_final4 %>% filter(estrato_pop6 == "abaixo de 50 mil") %>%  select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% describe(IQR=T)
+tab <- as.data.frame(tab)
+tab <- tab %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(tab) <- nomes
+#tab
+
+descr <- df_final4 %>% filter(estrato_pop6 == "abaixo de 50 mil") %>% select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, cluster, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% psych::describeBy(group = "cluster", IQR = T)
+
+
+ruim <- descr$C
+ruim <- as.data.frame(ruim)
+ruim <- ruim[-7,]
+ruim <- ruim %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(ruim) <- nomes
+#ruim
+
+regular <- descr$B
+regular <- as.data.frame(regular)
+regular <- regular[-7,]
+regular <- regular %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(regular) <- nomes
+#regular
+
+bom <- descr$A
+bom <- as.data.frame(bom)
+bom <- bom[-7,]
+bom <- bom %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(bom) <- nomes
+#bom
+
+
+tab_centroide_menos50 <- cbind(bom[c(1:6),c(2:3)], regular[c(1:6),c(2:3)], ruim[c(1:6),c(2:3)], tab[c(1:6),2:3])
+
+row.names(tab_centroide_menos50) <- nomes[1:6]
+
+tab_contexto_menos50 <- cbind(bom[-c(1:6),c(2:3)], regular[-c(1:6),c(2:3)], ruim[-c(1:6),c(2:3)], tab[-c(1:6),2:3])
+
+row.names(tab_contexto_menos50) <- nomes[-c(1:6)]
+
+tab_medianas_menos50 <- cbind(bom[-c(1:6), c(4,7)], regular[-c(1:6), c(4,7)], ruim[-c(1:6), c(4,7)], tab[-c(1:6), c(4,7)])
+
+row.names(tab_medianas_menos50) <- nomes[-c(1:6)]
+#kable(tab_centroide, caption = "Médias e variação dos indicadores por grupo  e total ", digits = 4) %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 1351)" = 2, "B \n(n = 1071)" = 2, "C \n(n = 423)" = 2, "Total \n(n = 2845)"=2))
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+tab <- df_final4 %>% filter(estrato_pop6 == "50 a 100 mil") %>%  select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% describe(IQR = T)
+tab <- as.data.frame(tab)
+tab <- tab %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(tab) <- nomes
+#tab
+
+descr <- df_final4 %>% filter(estrato_pop6 == "50 a 100 mil") %>% select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, cluster, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% psych::describe.by(group = "cluster", IQR = T)
+
+
+ruim <- descr$C
+ruim <- as.data.frame(ruim)
+ruim <- ruim[-7,]
+ruim <- ruim %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(ruim) <- nomes
+#ruim
+
+regular <- descr$B
+regular <- as.data.frame(regular)
+regular <- regular[-7,]
+regular <- regular %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(regular) <- nomes
+#regular
+
+bom <- descr$A
+bom <- as.data.frame(bom)
+bom <- bom[-7,]
+bom <- bom %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(bom) <- nomes
+#bom
+
+
+tab_centroide_50a100 <- cbind(bom[c(1:6),c(2:3)], regular[c(1:6),c(2:3)], ruim[c(1:6),c(2:3)], tab[c(1:6),2:3])
+
+row.names(tab_centroide_50a100) <- nomes[1:6]
+
+tab_contexto_50a100 <- cbind(bom[-c(1:6),c(2:3)], regular[-c(1:6),c(2:3)], ruim[-c(1:6),c(2:3)], tab[-c(1:6),2:3])
+
+row.names(tab_contexto_50a100) <- nomes[-c(1:6)]
+
+tab_medianas_50a100 <- cbind(bom[-c(1:6), c(4,7)], regular[-c(1:6), c(4,7)], ruim[-c(1:6), c(4,7)], tab[-c(1:6), c(4,7)])
+
+row.names(tab_medianas_50a100) <- nomes[-c(1:6)]
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+tab <- df_final4 %>% filter(estrato_pop6 == "100 a 300 mil") %>%  select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% describe(IQR = T)
+tab <- as.data.frame(tab)
+tab <- tab %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(tab) <- nomes
+#tab
+
+descr <- df_final4 %>% filter(estrato_pop6 == "100 a 300 mil") %>% select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, cluster, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% psych::describe.by(group = "cluster", IQR = T)
+
+
+ruim <- descr$C
+ruim <- as.data.frame(ruim)
+ruim <- ruim[-7,]
+ruim <- ruim %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(ruim) <- nomes
+#ruim
+
+regular <- descr$B
+regular <- as.data.frame(regular)
+regular <- regular[-7,]
+regular <- regular %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(regular) <- nomes
+#regular
+
+bom <- descr$A
+bom <- as.data.frame(bom)
+bom <- bom[-7,]
+bom <- bom %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(bom) <- nomes
+#bom
+
+
+tab_centroide_100a300 <- cbind(bom[c(1:6),c(2:3)], regular[c(1:6),c(2:3)], ruim[c(1:6),c(2:3)], tab[c(1:6),2:3])
+
+row.names(tab_centroide_100a300) <- nomes[1:6]
+
+tab_contexto_100a300 <- cbind(bom[-c(1:6),c(2:3)], regular[-c(1:6),c(2:3)], ruim[-c(1:6),c(2:3)], tab[-c(1:6),2:3])
+
+row.names(tab_contexto_100a300) <- nomes[-c(1:6)]
+
+tab_medianas_100a300 <- cbind(bom[-c(1:6), c(4,7)], regular[-c(1:6), c(4,7)], ruim[-c(1:6), c(4,7)], tab[-c(1:6), c(4,7)])
+
+row.names(tab_medianas_100a300) <- nomes[-c(1:6)]
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+tab <- df_final4 %>% filter(estrato_pop6 == "acima de 300 mil") %>%  select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% describe(IQR = T)
+tab <- as.data.frame(tab)
+tab <- tab %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(tab) <- nomes
+#tab
+
+descr <- df_final4 %>% filter(estrato_pop6 == "acima de 300 mil") %>% select(p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, cluster, `renda_menor_1/2SM_%`, IDHM, TMI, incid, mortali, Taxa_de_analfabetismo, indice_gini, `txdesemprego16ae+_2010`, cobAB2018, cobESF2018, renda_per_capita) %>% psych::describe.by(group = "cluster", IQR = T)
+
+
+ruim <- descr$C
+ruim <- as.data.frame(ruim)
+ruim <- ruim[-7,]
+ruim <- ruim %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(ruim) <- nomes
+#ruim
+
+regular <- descr$B
+regular <- as.data.frame(regular)
+regular <- regular[-7,]
+regular <- regular %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(regular) <- nomes
+#regular
+
+bom <- descr$A
+bom <- as.data.frame(bom)
+bom <- bom[-7,]
+bom <- bom %>% dplyr::select(n, mean, sd, median, min, max, IQR)
+row.names(bom) <- nomes
+#bom
+
+
+tab_centroide_mais300 <- cbind(bom[c(1:6),c(2:3)], regular[c(1:6),c(2:3)], ruim[c(1:6),c(2:3)], tab[c(1:6),2:3])
+
+row.names(tab_centroide_mais300) <- nomes[1:6]
+
+tab_contexto_mais300 <- cbind(bom[-c(1:6),c(2:3)], regular[-c(1:6),c(2:3)], ruim[-c(1:6),c(2:3)], tab[-c(1:6),2:3])
+
+row.names(tab_contexto_mais300) <- nomes[-c(1:6)]
+
+tab_medianas_mais300 <- cbind(bom[-c(1:6), c(4,7)], regular[-c(1:6), c(4,7)], ruim[-c(1:6), c(4,7)], tab[-c(1:6), c(4,7)])
+
+row.names(tab_medianas_mais300) <- nomes[-c(1:6)]
+
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+tab_centroide_menos50 <- rownames_to_column(tab_centroide_menos50, "Nome")
+tab_centroide_50a100 <- rownames_to_column(tab_centroide_50a100, "Nome")
+tab_centroide_100a300 <- rownames_to_column(tab_centroide_100a300, "Nome")
+tab_centroide_mais300 <- rownames_to_column(tab_centroide_mais300, "Nome")
+
+rbind(tab_centroide_menos50,
+tab_centroide_50a100,
+tab_centroide_100a300,
+tab_centroide_mais300) %>% mutate(mean = round(mean*100,1), sd = round(sd*100,0), 
+                                  mean.1 = round(mean.1*100,1), sd.1 = round(sd.1*100,0),
+                                  mean.2 = round(mean.2*100,1), sd.2 = round(sd.2*100,0),
+                                  mean.3 = round(mean.3*100,1), sd.3 = round(sd.3*100,0)) %>% kable( caption = "Médias e desvios dos indicadores operacionais" , col.names = c("","Média", "DP","Média", "DP", "Média", "DP", "Média", "DP")) %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 1351)" = 2, "B \n(n = 1071)" = 2, "C \n(n = 423)" = 2, "Total \n(n = 2845)"=2)) %>% pack_rows("Abaixo de 50 mil hab.", 1, 6) %>% pack_rows("50 a 100 mil hab.", 7,12) %>% pack_rows("100 a 300 mil hab.", 13, 18) %>% pack_rows("Acima de 300 mil hab.", 19, 24)
+
+
+#tab_centroide_menos50%>% kable(digits = 4,  col.names = c("","Média", "DP","Média", "DP", "Média", "DP", "Média", "DP"), caption = "Abaixo de 50 mil hab.") %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 292)" = 2, "B \n(n = 218)" = 2, "C \n(n = 30)" = 2, "Total \n(n = 540)"=2))
+
+
+#tab_centroide_50a100%>% kable(digits = 4,  col.names = c("","Média", "DP","Média", "DP", "Média", "DP", "Média", "DP"), caption = "50 a 100 mil hab.") %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 460)" = 2, "B \n(n = 375)" = 2, "C \n(n = 100)" = 2, "Total \n(n = 935)"=2))
+
+#tab_centroide_100a300%>% kable(digits = 4,  col.names = c("","Média", "DP","Média", "DP", "Média", "DP", "Média", "DP"), caption = "100 a 300 mil hab.") %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 433)" = 2, "B \n(n = 333)" = 2, "C \n(n = 174)" = 2, "Total \n(n = 940)"=2))
+
+#tab_centroide_mais300%>% kable(digits = 4,  col.names = c("","Média", "DP","Média", "DP", "Média", "DP", "Média", "DP"), caption = "Acima de 300 mil hab.") %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 166)" = 2, "B \n(n = 145)" = 2, "C \n(n = 119)" = 2, "Total \n(n = 430)"=2))
+
+tab_contexto_menos50 <- rownames_to_column(tab_contexto_menos50, "Nome")
+tab_contexto_50a100 <- rownames_to_column(tab_contexto_50a100, "Nome")
+tab_contexto_100a300 <- rownames_to_column(tab_contexto_100a300, "Nome")
+tab_contexto_mais300 <- rownames_to_column(tab_contexto_mais300, "Nome")
+
+rbind(tab_contexto_menos50,
+tab_contexto_50a100,
+tab_contexto_100a300,
+tab_contexto_mais300)  %>% kable(caption = "Médias e desvios variáveis de contexto", digits=c(1,2,1,2,1,2,1,2,1), col.names = c("","Média", "DP","Média", "DP", "Média", "DP", "Média", "DP")) %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 1351)" = 2, "B \n(n = 1071)" = 2, "C \n(n = 423)" = 2, "Total \n(n = 2845)"=2)) %>% pack_rows("Abaixo de 50 mil hab.", 1, 11) %>% pack_rows("50 a 100 mil hab.", 12,22) %>% pack_rows("100 a 300 mil hab.", 23, 33) %>% pack_rows("Acima de 300 mil hab.", 34, 44)
+
+
+tab_medianas_menos50 <- rownames_to_column(tab_medianas_menos50, "Nome")
+tab_medianas_50a100 <- rownames_to_column(tab_medianas_50a100, "Nome")
+tab_medianas_100a300 <- rownames_to_column(tab_medianas_100a300, "Nome")
+tab_medianas_mais300 <- rownames_to_column(tab_medianas_mais300, "Nome")
+
+rbind(tab_medianas_menos50,
+tab_medianas_50a100,
+tab_medianas_100a300,
+tab_medianas_mais300)  %>% kable(caption = "Medianas e intervalos interquartílicos das variáveis de contexto", digits=c(1,2,1,2,1,2,1,2,1), col.names = c("","Mediana", "IIQ","Mediana", "IIQ", "Mediana", "IIQ", "Mediana", "IIQ")) %>% kable_classic() %>% add_header_above(c(" " = 1, "A \n(n = 1351)" = 2, "B \n(n = 1071)" = 2, "C \n(n = 423)" = 2, "Total \n(n = 2845)"=2)) %>% pack_rows("Abaixo de 50 mil hab.", 1, 11) %>% pack_rows("50 a 100 mil hab.", 12,22) %>% pack_rows("100 a 300 mil hab.", 23, 33) %>% pack_rows("Acima de 300 mil hab.", 34, 44)
+```
+
+```{r}
+# GRÁFICO COM OS GRUPOS DO KMEANS
+dfgraf <- df_final4 %>% filter(estrato_pop6=="abaixo de 50 mil") %>% group_by(cluster) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+          "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+    
+          "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,  
+          
+          "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                           ) %>% gather(key = "indicador", value = "media", -cluster)
+
+
+#dfgraf %>% ggplot() +
+# aes(x = indicador, fill = cluster, weight = media) +
+# geom_bar(position = "dodge") +
+# scale_fill_hue() +
+# labs(title = "A ideia é algo do tipo: ") +
+# coord_flip() +
+# theme_minimal()
+
+#dfgraf %>% 
+#  ggplot(aes(x= media, y= reorder(indicador,media), fill=cluster)) +
+#  geom_col(position="dodge") +
+#  labs(y="Cluster", title = "ou algo do tipo")
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+
+
+#g1 <- dfgraf %>% 
+#  ggplot(aes(x= media, y= factor(indicador, levels = rev(unique(indicador)), ordered = #T ))) +
+#  geom_line(aes(group = paired))+
+#    geom_point(aes(color=cluster), size=4#, show.legend = FALSE
+#               ) +
+#   theme_minimal() +
+#    theme(
+#          plot.subtitle = element_text(size = 8, hjust= 0),
+#          plot.margin=unit(c(5.5,5.5,-1,5.5),"points")) +
+#    scale_colour_manual(aesthetics = "colour", values = c("#460259", "#1C8076", #"#69E69C")) +
+#    scale_x_discrete(expand = waiver(), guide = waiver(), position = "bottom")+
+#    labs(y = "< 50 \nmil", x = "") +
+#    xlim(0,100) 
+ # theme_minimal()
+
+
+```
+
+```{r}
+dfgraf$estrato = "abaixo de 50 mil"
+a <- dfgraf
+
+dfgraf <- df_final4 %>% filter(estrato_pop6=="50 a 100 mil") %>% group_by(cluster) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+    "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+                                                                                           "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,
+    
+    "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                                                                                                                  ) %>% gather(key = "indicador", value = "media", -cluster)
+
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+
+
+#g2 <- dfgraf %>% 
+#  ggplot(aes(x= media, y= factor(indicador, levels = rev(unique(indicador)), ordered = #T ))) +
+#  geom_line(aes(group = paired)) +
+#    geom_point(aes(color=cluster), size=4#, show.legend = FALSE
+#               ) +
+#    theme_minimal() +
+#    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), 
+#          plot.subtitle = element_text(size = 8, hjust= 0),
+#          plot.margin=unit(c(5.5,5.5,-15,5.5),"points")) +
+#  scale_colour_manual(aesthetics = "colour", values = c("#460259", "#1C8076", #"#69E69C"))+
+#    labs(y = "50 a 100 \nmil", x = "") +
+#    xlim(0,100) 
+    
+```
+
+```{r}
+dfgraf$estrato <- "50 a 100 mil"
+a <- rbind(a,dfgraf)
+dfgraf <- df_final4 %>% filter(estrato_pop6=="100 a 300 mil") %>% group_by(cluster) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+          "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+                                                                                           "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,
+    
+    "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                                                                                                                  ) %>% gather(key = "indicador", value = "media", -cluster)
+
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+```
+
+```{r}
+dfgraf$estrato <- "100 a 300 mil"
+a <- rbind(a,dfgraf)
+dfgraf <- df_final4 %>% filter(estrato_pop6=="acima de 300 mil") %>% group_by(cluster) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+          "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+                                                                                           "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,
+    
+    "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                                                                                                                  ) %>% gather(key = "indicador", value = "media", -cluster)
+
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+```
+
+```{r}
+dfgraf$estrato <- "acima de 300 mil"
+a <- rbind(a, dfgraf)
+a
+
+a$estrato <- as.factor(a$estrato)
+a$estrato <- ordered(a$estrato,
+                         levels = c("abaixo de 50 mil","50 a 100 mil", "100 a 300 mil", "acima de 300 mil"))
+
+levels(a$estrato) <- c("< 50 mil hab.", "50 - 100 mil hab.", "100 - 300 mil hab.", " > 300 mil hab.")
+
+a$estrato <- factor(a$estrato, levels = rev(levels(a$estrato)), ordered = TRUE)
+
+a$indicador <- factor(a$indicador, levels = rev(levels(a$indicador)), ordered = TRUE)
+
+#g1 <- ggplot(a) +
+#      aes(x = indicador, y = media, 
+#          fill = cluster, colour = cluster) +
+#      geom_point(size = 4) +
+#      scale_colour_manual(aesthetics = "colour", values = c("#5FCB42", "#63A3E3", "#964DAE")) +
+#      facet_grid(vars(estrato), vars(), switch = "y") +
+      #scale_fill_hue() +
+#      theme(strip.placement = "outside",
+#            strip.text.y.left = element_text(size=7),
+#            legend.position = "bottom",
+#            margin(t = 0, r = 0.5, b = 0, l = 0, unit = "pt")
+            #strip.text= element_text(size = 7)
+#              ) +
+#      labs(y = "% médio", x = " ", color = "Grupo", fill = "Grupo", title = "a. K-médias") +
+#      coord_flip() +
+#      theme_pubclean()
+
+# g1 <- ggplot(a) +
+#   aes(x = indicador, y = media, fill = cluster, colour = cluster) +
+#   geom_point(size = 2.5) +
+#   scale_colour_manual(aesthetics = "colour", values = c("#5FCB42", "#63A3E3", "#964DAE")) +
+#   facet_grid(vars(estrato), vars(), switch = "y") +
+#   coord_flip() + 
+#   theme(legend.position = "none", 
+#         strip.placement = "outside", 
+#         strip.text.y.left = element_text(size=14),
+#         axis.text = element_text(size=14),
+#         axis.title.x = element_text(size = 14),
+#         panel.grid.major.y = element_line(linetype = "dotted", colour = "gray30"),
+#         panel.background = element_rect(fill = "white"),
+#         plot.title = element_text(hjust = 0)
+#         ) + 
+#   labs(y = "% médio", x = " ", title = " ") #+
+#     
+#   ggpar(g1, legend = "bottom")
+      
+metas <- a %>% group_by(indicador, estrato) %>% summarise(max_ind = max(media))
+metas$meta <- c(rep(5,4),rep(90,4), rep(90,4), rep(90,4),rep(100,4),rep(72,4))
+
+a$indicador <- factor(a$indicador, levels = rev(levels(a$indicador)), ordered = TRUE)
+
+g1 <- ggplot(a)+
+  aes(x=estrato, y = media, colour = cluster)+
+  geom_point(size = 2.5, alpha=3/4) +
+  scale_colour_manual(aesthetics = "colour", values = c("#0597F2", "#F5BB1D", "#D92949")) +
+  facet_grid(vars(indicador), vars(), switch = "y")+
+  coord_flip() +
+  geom_point(data=metas, aes(y=meta, x=estrato), color = "black", shape = 4) +
+  theme(legend.position = "none", 
+        strip.placement = "outside", 
+        strip.text.y.left = element_text(size=14),
+        axis.text = element_text(size=14),
+        axis.title.x = element_text(size = 14),
+        panel.grid.major.y = element_line(linetype = "dotted", colour = "gray30"),
+        panel.background = element_rect(fill = "white"),
+        plot.title = element_text(hjust = 0)
+        ) + 
+  labs(y = "% médio", x = " ", title = " ")
+
+ggplot(a)+
+  aes(x=estrato, y = media, colour = cluster) +
+  geom_point(size=2.5) + 
+  facet_grid(vars(indicador), vars(), switch = "y") +
+  coord_flip() +
+  geom_point(data=metas, aes(y=meta, x=estrato), color = "red", shape = 4)
+
+
+jpeg("dumbbell_lr.jpeg", res = 300, width = 1200, height = 1650)
+ggpar(g1, legend = "bottom")
+dev.off()
+```
+
+```{r}
+# GRÁFICO COM OS GRUPOS DO LPA
+dfgraf <- df_final4 %>% filter(estrato_pop6=="abaixo de 50 mil") %>% group_by(LPA) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+          "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+    
+          "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,  
+          
+          "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                           ) %>% gather(key = "indicador", value = "media", -LPA)
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+
+```
+
+```{r}
+dfgraf$estrato = "abaixo de 50 mil"
+a <- dfgraf
+
+dfgraf <- df_final4 %>% filter(estrato_pop6=="50 a 100 mil") %>% group_by(LPA) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+    "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+                                                                                           "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,
+    
+    "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                           ) %>% gather(key = "indicador", value = "media", -LPA)
+
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+    
+```
+
+```{r}
+dfgraf$estrato <- "50 a 100 mil"
+a <- rbind(a,dfgraf)
+dfgraf <- df_final4 %>% filter(estrato_pop6=="100 a 300 mil") %>% group_by(LPA) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+          "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+                                                                                           "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,
+    
+    "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                                                                                                                  ) %>% gather(key = "indicador", value = "media", -LPA)
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+```
+
+```{r}
+dfgraf$estrato <- "100 a 300 mil"
+a <- rbind(a,dfgraf)
+dfgraf <- df_final4 %>% filter(estrato_pop6=="acima de 300 mil") %>% group_by(LPA) %>% summarise(
+          "Confirmação laboratorial" = mean(p_CL_tbpulm_csnv, na.rm = T)*100, 
+                                                                                           "Testagem HIV" = mean(p_ex_HIV_csnv, na.rm = T)*100,
+                                                                                           "Realização TDO" = mean(p_TDO_tbpulm_csnv, na.rm=T)*100,
+          
+          "Exame de contatos" = mean(p_cont_ex, na.rm=T)*100,
+                                                                                           "Cura" = mean(p_cura_CL_tbpulm_csnv, na.rm=T)*100,
+    
+    "Abandono" = mean(p_ab_CL_tbpulm_csnv, na.rm = T)*100
+                                                                                            ) %>% gather(key = "indicador", value = "media", -LPA)
+
+
+dfgraf$indicador <- as.factor(dfgraf$indicador)
+levels(dfgraf$indicador)
+dfgraf$indicador <- ordered(dfgraf$indicador,
+                         levels = c("Confirmação laboratorial", "Testagem HIV", "Realização TDO", "Exame de contatos", "Cura", "Abandono")) 
+levels(dfgraf$indicador) <- c("Confirmação \nlaboratorial","Testagem \nHIV", "Realização \nTDO","Exame \nde contatos","Cura","Abandono")
+dfgraf <- dfgraf %>% mutate(paired = c(rep(1, 3), rep(2,3), rep(3,3), rep(4,3), rep(5,3), rep(6,3)))
+```
+
+```{r}
+dfgraf$estrato <- "acima de 300 mil" 
+a <- rbind(a, dfgraf)
+a
+
+a$estrato <- as.factor(a$estrato)
+a$estrato <- ordered(a$estrato,
+                         levels = c("abaixo de 50 mil","50 a 100 mil", "100 a 300 mil", "acima de 300 mil"))
+
+levels(a$estrato) <- c("< 50 mil hab.", "50 - 100 mil hab.", "100 - 300 mil hab.", " > 300 mil hab.")
+a$estrato <- factor(a$estrato, levels = rev(levels(a$estrato)), ordered = TRUE)
+
+#a$indicador <- factor(a$indicador, levels = rev(levels(a$indicador)), ordered = TRUE)
+
+g <- ggplot(a)+
+    aes(x=estrato, y = media, colour = LPA)+
+  geom_point(size = 2.5, alpha=3/4) +
+  scale_colour_manual(aesthetics = "colour", values = c("#0597F2", "#F5BB1D", "#D92949")) +
+  facet_grid(vars(indicador), vars(), switch = "y")+
+  coord_flip() +
+  geom_point(data=metas, aes(y=meta, x=estrato, fill = "Metas"), color = "black", shape = 4) +
+  theme(legend.position = "bottom",           
+            legend.title = element_blank(),
+            legend.text = element_text(size = 16)
+        ) + 
+  labs(y = "% médio", x = " ", title = " ")  
+
+legenda <- get_legend(g)
+
+# gg <- ggplot(a)+
+#     aes(x=estrato, y = media)+
+#   geom_point(size = 2.5, alpha=3/4) +
+#   scale_colour_manual(aesthetics = "colour", values = c("#0597F2", "#F5BB1D", "#D92949")) +
+#   facet_grid(vars(indicador), vars(), switch = "y")+
+#   coord_flip() +
+#   geom_point(data=metas, aes(y=meta, x=estrato, fill = "Meta"), color = "red", shape = 4) +
+#   theme(legend.position = "bottom",           
+#             legend.title = element_blank(),
+#             legend.text = element_text(size = 16)
+#         ) + 
+#   labs(y = "% médio", x = " ", title = " ")  
+# legenda <- get_legend(g)      
+# legenda2 <- get_legend(gg)      
+
+#g2 <- ggplot(a) +
+#      aes(x = indicador, y = media, 
+#          fill = LPA, colour = LPA) +
+#      geom_point(size = 4) +
+#      scale_colour_manual(aesthetics = "colour", values = c("#5FCB42", "#63A3E3", "#964DAE")) +
+#      facet_grid(vars(estrato), vars(), switch = "y") +
+      #scale_fill_hue() +
+#      labs(y = "% médio", x = " ", title = "APL"
+#           ) +
+#      theme(legend.position = "bottom",
+#            strip.placement = "outside",
+#            strip.text.y.left = element_text(size=7),
+#            margin(t = 0, r = 0, b = 0, l = 0.5, unit = "pt")
+            #strip.text= element_text(size = 7)
+#              ) +
+#      coord_flip() +
+#      theme_pubclean()
+
+# g2 <- ggplot(a) +
+#   aes(x = indicador, y = media, fill = LPA, colour = LPA) +
+#   geom_point(size = 2.5) +
+#   scale_colour_manual(aesthetics = "colour", values = c("#5FCB42", "#63A3E3", "#964DAE")) +
+#   facet_grid(vars(estrato), vars(), switch = "y") +
+#   coord_flip() + 
+#   theme(legend.position = "none", 
+#         strip.placement = "outside", 
+#         strip.text.y.left = element_text(size=14),
+#         axis.text = element_text(size=14),
+#         axis.title.x = element_text(size = 14),
+#         panel.grid.major.y = element_line(linetype = "dotted", colour = "gray30"),
+#         panel.background = element_rect(fill = "white"),
+#         plot.title = element_text(hjust = 0),
+#         
+#         ) + 
+#   labs(y = "% médio", x = " ", title = " ") #+
+#   #theme_cleveland()
+#   #theme_pubclean()
+
+g2 <- ggplot(a)+
+    aes(x=estrato, y = media, colour = LPA)+
+  geom_point(size = 2.5, alpha=3/4) +
+  scale_colour_manual(aesthetics = "colour", values = c("#0597F2", "#F5BB1D", "#D92949")) +
+  facet_grid(vars(indicador), vars(), switch = "y")+
+  coord_flip() +
+  geom_point(data=metas, aes(y=meta, x=estrato), color = "black", shape = 4) +
+  theme(legend.position = "none", 
+        strip.placement = "outside", 
+        strip.text.y.left = element_text(size=14),
+        axis.text = element_text(size=14),
+        axis.title.x = element_text(size = 14),
+        panel.grid.major.y = element_line(linetype = "dotted", colour = "gray30"),
+        panel.background = element_rect(fill = "white"),
+        plot.title = element_text(hjust = 0)
+        ) + 
+  labs(y = "% médio", x = " ", title = " ")      
+
+
+#ggpar(g2, legend = "bottom")
+      
+#jpeg("dumbbell_lpa.jpeg", res = 300, width = 1200, height = 1650)
+#ggpar(g2, legend = "bottom")
+#dev.off()
+``` 
+
+```{r}
+library(gridExtra)
+
+#gg <- grid.arrange(g1, g2, legenda, ncol=2, nrow = 2, 
+#             layout_matrix = rbind(c(1,2), c(3,3)),
+#             widths = c(2.7, 2.7), heights = c(2.5, 0.2)) 
+
+gg1 <- grid.arrange(
+             arrangeGrob(g1, left = text_grob("a. K-médias", size = 16, x = unit(1, "npc"), y = unit(.979, "npc"))),
+             arrangeGrob(g2, left = text_grob("b. APL        ", size = 16, x = unit(1, "npc"), y = unit(.979, "npc"))), 
+             legenda, ncol=2, nrow = 2, 
+             layout_matrix = rbind(c(1,2), c(3,3)),
+             widths = c(2.7, 2.7), heights = c(2.4, 0.3))
+
+ggsave("Graf Medias Kmeans LPA6.jpg", plot = gg1, dpi = 500, width = 14, height = 9)
+
+#jpeg("dumbbell_both.jpeg", res = 300, width = 3200, height = 1750, )
+#grid.arrange(ggpar(g1, legend = "bottom"),ggpar(g2, legend = "bottom"), ncol=2)
+#dev.off()
+
+```
+
+
+```{r}
+banco <- select(df_final4, ID_MUNIC_A, Região, UF, `Nome da UF`, `Nome do Município`, População = pop_total, Grupo = cluster, casos_novos, cs_nv_TB_pulm, estrato_pop6)
+capitais <- c("Rio Branco", "Maceió", "Macapá", "Manaus", "Salvador", "Fortaleza", "Brasília", "Vitória", "Goiânia", "São Luís", "Cuiabá", "Campo Grande", "Belo Horizonte", "Belém", "João Pessoa", "Curitiba", "Recife", "Teresina", "Rio de Janeiro", "Natal", "Porto Alegre", "Porto Velho", "Boa Vista", "Florianópolis", "São Paulo", "Aracaju", "Palmas")
+capitais <- filter(banco, `Nome do Município` %in% capitais) %>% filter(ID_MUNIC_A != 250190 & ID_MUNIC_A != 411760) 
+capitais  %>% dplyr::select(-`População`, -casos_novos, -cs_nv_TB_pulm, -estrato_pop6) %>% kable(caption = "Enquadramento das capitais no agrupamento") %>%  kable_classic(fixed_thead = T)
+
+capitais <- c("Rio Branco", "Maceió", "Macapá", "Manaus", "Salvador", "Fortaleza", "Brasília", "Vitória", "Goiânia", "São Luís", "Cuiabá", "Campo Grande", "Belo Horizonte", "Belém", "João Pessoa", "Curitiba", "Recife", "Teresina", "Rio de Janeiro", "Natal", "Porto Alegre", "Porto Velho", "Boa Vista", "Florianópolis", "São Paulo", "Aracaju", "Palmas")
+banco_capitais <- filter(df_final4, `Nome do Município` %in% capitais) %>% filter(ID_MUNIC_A != 250190 & ID_MUNIC_A != 411760) 
+banco_capitais %>% select(`Nome do Município`, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, casos_novos, cobAB2018, cobESF2018) %>% kable(digits = 4) %>% kable_classic("striped", fixed_thead = T)
+
+indicadores <- df_final4 %>% select(ID_MUNIC_A, `Nome da UF`, `Nome do Município`, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, estrato_pop6, cluster, casos_novos, cobAB2018, cobESF2018)
+```
+
+
+```{r}
+
+
+
+banco$Região <- as.factor(banco$Região)
+
+tab_regiao <- banco %>% group_by(`Estrato populacional` = estrato_pop6,`Região`, Grupo) %>% summarise(n=n())
+tab_regiao<- spread(tab_regiao, key = Grupo, value = n) %>% mutate(Total = sum(A,B,C), pA= (A/Total)*100, pB= (B/Total)*100, pC= (C/Total)*100) %>% dplyr::select(Região, A, pA, B, pB, C, pC, Total)
+
+tab_regiao %>% kable(caption = "Municípios por estrato populacional, região e grupo: quantidade e percentual por linha", digits = 2) %>% kable_classic(full_width = F)
+
+tab_regiao <- banco %>% group_by(`Estrato populacional` = estrato_pop6,`Região`, Grupo) %>% summarise(n=n())
+tab_regiao<- spread(tab_regiao, key = Região, value = n) %>% rowwise()%>% mutate(Total = sum(`CENTRO-OESTE`, NORDESTE, NORTE, SUDESTE, SUL) , pCO = (`CENTRO-OESTE`/Total)*100, pNE = (NORDESTE/Total)*100, pNO = (NORTE/Total)*100, pSE = (SUDESTE/Total)*100, pSU = (SUL/Total)*100  ) %>% dplyr::select(`Estrato populacional`, Grupo, `CENTRO-OESTE`, pCO, NORDESTE, pNE, NORTE, pNO, SUDESTE, pSE, SUL, pSU, Total) 
+
+tab_regiao %>% kable(caption = "Municípios por estrato populacional, grupo e região: Quantidade e percentual por linha", digits = 2) %>% kable_classic(full_width = F)
+tab_regiao
+
+tab_casosnovos <- banco %>%  group_by(`Estrato populacional` = estrato_pop6, `Região`, Grupo) %>% summarise(n = sum(casos_novos))
+tab_casosnovos <- spread(tab_casosnovos, key = Grupo, value = n) %>% mutate(Total = sum(A,B,C), pA= (A/Total)*100, pB= (B/Total)*100, pC= (C/Total*100)) %>% dplyr::select(Região, A, pA, B, pB, C, pC, Total) 
+tab_casosnovos %>% kable(caption = "Casos novos por estrato populacional, região e grupo: Quantidade e percentual por linha", digits = 2) %>% kable_classic(full_width = F)
+
+tab_casosnovos <- banco %>%  group_by(`Estrato populacional` = estrato_pop6, `Região`, Grupo) %>% summarise(n = sum(casos_novos))
+tab_casosnovos <- spread(tab_casosnovos, key = Região, value = n) %>% rowwise()%>% mutate(Total = sum(`CENTRO-OESTE`, NORDESTE, NORTE, SUDESTE, SUL) , pCO = (`CENTRO-OESTE`/Total)*100, pNE = (NORDESTE/Total)*100, pNO = (NORTE/Total)*100, pSE = (SUDESTE/Total)*100, pSU = (SUL/Total)*100  ) %>% dplyr::select(`Estrato populacional`, Grupo, `CENTRO-OESTE`, pCO, NORDESTE, pNE, NORTE, pNO, SUDESTE, pSE, SUL, pSU, Total) %>% select(`Estrato populacional`, Grupo, `CENTRO-OESTE`, pCO, NORDESTE, pNE, NORTE, pNO, SUDESTE, pSE, SUL, pSU, Total)
+
+tab_casosnovos %>% kable(caption = "Casos novos por estrato populacional, grupo e região: Quantidade e percentual por linha", digits = 2) %>% kable_classic(full_width = F)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+
+
+#paste(table(banco$Região), " (", round(prop.table(table(banco$Região))*100,2), "%)", sep = "")
+regiao <- banco %>% group_by(Grupo) %>% summarise(n=n(), 
+                                        n_CENTRO_OESTE = sum(Região == "CENTRO-OESTE"),
+                                        perc_CENTRO_OESTE = (n_CENTRO_OESTE/n)*100,
+                                        n_NORDESTE = sum(Região == "NORDESTE"),
+                                        perc_NORDESTE = (n_NORDESTE/n)*100,
+                                        n_NORTE = sum(Região == "NORTE"),
+                                        perc_NORTE = (n_NORTE/n)*100,
+                                        n_SUDESTE = sum(Região == "SUDESTE"),
+                                        perc_SUDESTE = (n_SUDESTE/n)*100,
+                                        n_SUL = sum(Região == "SUL"),
+                                        perc_SUL = (n_SUL/n)*100
+                                        
+                                        ) 
+
+
+
+
+
+
+tab_csnvtbp <- banco %>%  group_by(`Região`, Grupo) %>% summarise(n = sum(cs_nv_TB_pulm))
+tab_csnvtbp <- spread(tab_csnvtbp, key = Grupo, value = n) %>% mutate(Total = sum(A,B,C), pA= (A/Total)*100, pB= (B/Total)*100, pC= (C/Total*100)) %>% dplyr::select(Região, A, pA, B, pB, C, pC, Total) 
+tab_csnvtbp %>% kable(caption = "Quantidade e percentual de casos novos de TBP por região e grupo", digits = 2) %>% kable_classic(full_width = F)
+
+```
+
+```{r}
+#esquisse::esquisser(df_final4)
+
+library(ggplot2)
+
+g1 <- ggplot(df_final4) +
+ aes(x = "", y = p_CL_tbpulm_csnv, fill = cluster) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(estrato_pop6)) +
+ labs( x = "")
+
+g2 <- ggplot(df_final4) +
+ aes(x = "", y = p_cont_ex, fill = cluster) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(estrato_pop6)) +
+ labs( x = "")
+
+g3 <- ggplot(df_final4) +
+ aes(x = "", y = p_ex_HIV_csnv, fill = cluster) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(estrato_pop6)) +
+ labs( x = "")
+
+g4 <- ggplot(df_final4) +
+ aes(x = "", y = p_TDO_tbpulm_csnv, fill = cluster) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(estrato_pop6)) +
+ labs( x = "")
+
+g5 <- ggplot(df_final4) +
+ aes(x = "", y = p_ab_CL_tbpulm_csnv, fill = cluster) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(estrato_pop6)) +
+ labs( x = "")
+
+g6 <- ggplot(df_final4) +
+ aes(x = "", y = p_cura_CL_tbpulm_csnv, fill = cluster) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(estrato_pop6)) +
+ labs( x = "")
+
+#contexto
+
+df_final4$cluster <- factor(df_final4$cluster, levels = rev(levels(df_final4$cluster)), ordered = TRUE)
+
+levels(df_final4$estrato_pop6) <- c("< 50 mil \nhab.", "50-100 mil \nhab.", "100-300 mil \nhab.", "> 300 mil\nhab.")
+
+#g2 <- ggplot(df_final4) +
+# aes(x = cluster, y = `renda_menor_1/2SM_%`, fill = cluster) +
+# scale_fill_manual(values=c("#0E4B75", "#1C8076", "#69E69C")) +
+#  theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot() +
+# theme(legend.position = "none") +
+#labs(x = " ", y = "População com renda \ninferior a 1/2 SM (%)", title = "") 
+
+
+#g3 <- ggplot(df_final4) +
+# aes(x = cluster, y = IDHM, fill = cluster) +
+# geom_violin(trim = T) +
+# scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+# theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot(width=0.04) +
+# theme(legend.position = "none") +
+# labs(x = " ", y = "IDHM", title = "") 
+
+#g4 <- ggplot(df_final4) +
+# aes(x = cluster, y = TMI, fill = cluster) +
+# geom_violin(trim = T) +
+# scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+# theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot(width=0.04) +
+# theme(legend.position = "none") +
+# labs(x = " ", y = "Taxa de mortalidade infantil", title = "") 
+
+g5 <- df_final4 %>%  
+  ggplot() +
+ aes(x = cluster, y = mortali, fill = cluster) +
+ scale_fill_manual(values=c("#D92949", "#F5BB1D", "#0597F2")) +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), switch="both") +
+ geom_boxplot(outlier.colour = "gray", alpha = 3/5) +
+ stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ theme(legend.position = "none", strip.text= element_text(
+        size = 8), axis.title.x = element_text(size = 9), plot.caption = element_text(size = 7), strip.placement = "outside", plot.margin=unit(c(5.5,5.5,0.5,5.5),"points"),
+       panel.grid =  element_blank(),
+       axis.line = element_line(colour = "black")
+       ) +
+ coord_flip() +
+ labs(x = " ", y = "Taxa de mortalidade por TB (100.000 hab.)", caption = "") 
+
+#esquisse::esquisser(df_final4)
+
+#g6 <- ggplot(df_final4) +
+# aes(x = cluster, y = Taxa_de_analfabetismo, fill = cluster) +
+# geom_violin(trim = T) +
+# scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+# theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot(width=0.04) +
+# theme(legend.position = "none") +
+# labs(x = " ", y = "Taxa de analfabetismo", title = "") 
+
+#g7 <- ggplot(df_final4) +
+# aes(x = cluster, y = indice_gini, fill = cluster) +
+# geom_violin(trim = T) +
+# scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+# theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot(width=0.04) +
+# theme(legend.position = "none") +
+# labs(x = " ", y = "Índice de gini", title = "") 
+
+g8 <- ggplot(df_final4) +
+ aes(x = cluster, y = `txdesemprego16ae+_2010`, fill = cluster) +
+ scale_fill_manual(values=c("#D92949", "#F5BB1D", "#0597F2")) +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), switch="both") +
+ geom_boxplot(outlier.colour = "gray", alpha = 3/5) +
+ stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ theme(legend.position = "none", strip.text= element_text(
+        size = 8), axis.title.x = element_text(size = 9), strip.placement = "outside", plot.margin=unit(c(5.5,5.5,0.5,5.5),"points"),
+       panel.grid =  element_blank(),
+       axis.line = element_line(colour = "black")
+       ) +
+ coord_flip() +
+ labs(x = " ", y = "Taxa de desemprego (%)", title = "") 
+
+g9 <- ggplot(df_final4) +
+ aes(x = cluster, y = cobAB2018, fill = cluster) +
+ scale_fill_manual(values=c("#D92949", "#F5BB1D", "#0597F2")) +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), switch="both") +
+ geom_boxplot(outlier.colour = "gray", alpha = 3/5) +
+ stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ theme(legend.position = "none", 
+       strip.text= element_text(size = 8), 
+       axis.title.x = element_text(size = 9), 
+       plot.caption = element_text(size = 7), 
+       strip.placement = "outside", 
+       plot.margin=unit(c(5.5,5.5, 0.5,5.5),"points"),
+       panel.grid =  element_blank(),
+       axis.line = element_line(colour = "black")
+       ) +
+ coord_flip() +
+ labs(x = " ", y = "Cobertura AB (%)", title = "") 
+
+g15 <- ggplot(df_final4) +
+ aes(x = cluster, y = taxa_aids, fill = cluster) +
+ scale_fill_manual(values=c("#D92949", "#F5BB1D", "#0597F2")) +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), switch="both") +
+ geom_boxplot(outlier.colour = "gray", alpha = 3/5) +
+ stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ theme(legend.position = "none", 
+       strip.text= element_text(size = 8), 
+       axis.title.x = element_text(size = 9), 
+       plot.caption = element_text(size = 7), 
+       strip.placement = "outside", 
+       plot.margin=unit(c(5.5,5.5,0.5,5.5),"points"),
+       
+       panel.grid =  element_blank(),
+       axis.line = element_line(colour = "black")
+       ) +
+ coord_flip() +
+ labs(x = " ", y = "Taxa de detecção de aids (%)", title = "") 
+ 
+
+#g10 <- ggplot(df_final4) +
+# aes(x = cluster, y = cobESF2018, fill = cluster) +
+# scale_fill_manual(values=c("#0E4B75", "#1C8076", "#69E69C")) +
+# theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot() +
+# theme(legend.position = "none") +
+# labs(x = " ", y = "Cobertura ESF", title = "") 
+
+#g11 <- ggplot(df_final4) +
+# aes(x = cluster, y = renda_per_capita, fill = cluster) +
+# geom_violin(trim = T) +
+# scale_fill_manual(values=c("#696969", "#858585", "#bebebe")) +
+# theme_minimal() +
+# facet_wrap(vars(estrato_pop6)) +
+# geom_boxplot(width=0.04) +
+# theme(legend.position = "none") +
+# labs(x = " ", y = "Renda per capita", title = "") 
+
+#esquisse::esquisser(df_final4)
+
+
+              # características dos pacientes notificados
+
+#g11 <- ggplot(df_final4) +
+# aes(x = "", y = p.TB_HIV, fill = cluster) +
+# geom_boxplot() +
+# scale_fill_hue() +
+# labs(x = " ", y = "Coinfecção TB-HIV dentre os casos novos de TB (%)") +
+# theme_minimal() +
+# scale_fill_manual(values=c("#0E4B75", "#1C8076", "#69E69C")) +
+# theme(legend.position = "none") +
+# facet_wrap(vars(estrato_pop6))
+
+g12 <- ggplot(df_final4) +
+ aes(x = cluster, y = p.pop_vuln, fill = cluster) +
+ geom_boxplot(outlier.colour = "gray") +
+ stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ labs(x = "", y = "População vulnerável \ndentre os casos novos de TB (%)") +
+ theme_minimal() +
+ scale_fill_manual(values=c("#0E4B75", "#1C8076", "#69E69C")) +
+ theme(legend.position = "none", strip.text= element_text(
+        size = 7), axis.title.x = element_text(size = 9), plot.caption = element_text(size = 7)) +
+ coord_flip() +facet_grid(vars(estrato_pop6))
+
+
+g13 <- ggplot(df_final4) +
+ aes(x = cluster, y = p.pop_comorb, fill = cluster) +
+ geom_boxplot(outlier.colour = "gray") +
+ stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ labs(x = " ", y = "População com comorbidades \ndentre os casos novos de TB (%)") +
+ theme_minimal() +
+ scale_fill_manual(values=c("#0E4B75", "#1C8076", "#69E69C")) +
+ theme(legend.position = "none", strip.text= element_text(
+        size = 7), axis.title.x = element_text(size = 9), plot.caption = element_text(size = 7), strip.placement = "outside"
+       ) +
+ coord_flip() +
+ facet_grid(vars(estrato_pop6), switch="both")
+
+df_final4$cluster <- factor(df_final4$cluster, levels = rev(levels(df_final4$cluster)), ordered = TRUE)
+
+g1 <- df_final4 %>%
+ filter() %>% 
+    ggplot() +
+ aes(x = cluster, y = incid, fill = cluster) +  
+ facet_grid(vars(estrato_pop6), switch="both") +
+  coord_flip() +
+  geom_boxplot(outlier.colour = "gray", alpha = 3/5) +
+ #stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +  
+  ylim(0,75)+
+ theme_minimal() +
+ theme(legend.position = "none", strip.text= element_text(
+        size = 8), axis.title.y = element_text(size = 9), plot.caption = element_text(size = 7), strip.placement = "outside",        
+       plot.margin=unit(c(5.5,5.5, 0.5,5.5),"points"),
+       panel.grid =  element_blank(),
+       axis.line = element_line(colour = "black")
+       ) +
+ scale_fill_manual(values=c("#D92949", "#F5BB1D", "#0597F2")) +
+ #coord_flip() +
+ labs(x = " ", y = "Taxa de incidência de TB \n(100.000 hab.)", caption = "* outliers entre 75 e 730 não exibidos") 
+
+
+
+tiff("boxplot_contexto.tiff", res = 320, height = 3000, width = 2500)
+#grid.arrange(g1,g5,g15,g8,g9)
+  grid.arrange(g1,arrangeGrob(g5,g15,g8,g9), ncol=1, heights=c(1.5, 4.5))
+dev.off()
+
+#g <- grid.arrange(g1,arrangeGrob(g5,g15,g8,g9), ncol=1, heights=c(1.5, 4.5))
+g <- grid.arrange(g1,g5,g15,g8,g9)
+ggsave(plot = g, "boxplot_contex_gg2.jpeg", dpi = 450, height = 9.5, width = 8)
+
+```
+
+```{r}
+df_final4 %>% filter(estrato_pop6== "abaixo de 50 mil" & cluster == "C") %>% select(ID_MUNIC_A, casos_novos, num_obit_TB, cs_nv_TB_pulm, p_CL_tbpulm_csnv, p_cont_ex, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_ab_CL_tbpulm_csnv, p_cura_CL_tbpulm_csnv, ab, cura, transf, incid, mortali)%>% kable(digits=1, caption = "Municípios do grupo C, no estrato 'abaixo de 50 mil hab'") %>% kable_classic()
+
+#cura0 <- df_final4 %>% filter(estrato_pop6== "abaixo de 50 mil" & cluster == "C") %>% select(ID_MUNIC_A)
+
+```
+
+
+```{r}
+#library(writexl)
+#df_final4 %>% select(ID_MUNIC_A, `Nome do Município`, estrato_pop6, cluster) %>% write_xlsx("agrupamento_municip.xlsx")
+
+library(writexl)
+df_final4 %>% select(ID_MUNIC_A, `Nome do Município`, estrato_pop6, cluster, LPA, p_CL_tbpulm_csnv, p_ex_HIV_csnv, p_TDO_tbpulm_csnv, p_cont_ex, p_cura_CL_tbpulm_csnv, p_ab_CL_tbpulm_csnv, pop2018, incid, mortali, taxa_aids, `txdesemprego16ae+_2010`, cobAB2018) %>% write_xlsx("agrupamento_municip_context.xlsx")
+
+```
+
+```{r message=FALSE, warning=FALSE}
+library(readr)
+daniele <- read_delim("cenarios_TB_cluster_total.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+
+daniele <- df_final4 %>% select(ID_MUNIC_A, `Nome do Município`, estrato_pop6, cluster) %>% merge(daniele, by.x = "ID_MUNIC_A", by.y = "munres")
+
+daniele %>% group_by(estrato_pop6, cluster, cluster_total) %>% summarise( n = n())
+```
+
+
+
+```{r}
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(taxa_m_aids = mean(taxa_aids, na.rm = T), taxa_sd_aids = sd(taxa_aids, na.rm = T), taxa_medi_aids = median(taxa_aids), taxa_IQR_aids = IQR(taxa_aids, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Taxa aids, por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(taxa_m_aids = mean(taxa_aids, na.rm = T), taxa_sd_aids = sd(taxa_aids, na.rm = T), taxa_medi_aids = median(taxa_aids), taxa_IQR_aids = IQR(taxa_aids, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Taxa aids, total estratos") %>% kable_classic()
+
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(popurb_m = mean(Urbana, na.rm = T), popurb_sd = sd(Urbana, na.rm = T), popurb_medi = median(Urbana, na.rm = T), popurb_IQR = IQR(Urbana, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "População urbana, por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(popurb_m = mean(Urbana, na.rm = T), popurb_sd = sd(Urbana, na.rm = T), popurb_medi = median(Urbana, na.rm = T), popurb_IQR = IQR(Urbana, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "População urbana, total estratos") %>% kable_classic()
+
+
+
+aglom_domic <- read_excel("media_moradores_domicilio.xlsx", 
+    skip = 5)
+names(aglom_domic) <- c("bla", "ID", "mun", "media_mor_total", "uni1", "media_mor_urb", "uni2", "media_mor_rur", "uni3")
+aglom_domic$ID <- str_sub(aglom_domic$ID, 1,6)
+aglom_domic <- select(aglom_domic, ID, media_mor_total)
+df_final4 <- merge(df_final4, aglom_domic, by.x = "ID_MUNIC_A", by.y = "ID", all.x = T)
+head(df_final4$media_mor_total)
+rm(aglom_domic)
+
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(média = mean(p.drogas, na.rm = T), desvio = sd(p.drogas, na.rm = T), mediana = median(p.drogas, na.rm = T), IQR = IQR(p.drogas, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Álcool, tabagismo ou drogas, por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(média = mean(p.drogas, na.rm = T), desvio = sd(p.drogas, na.rm = T), mediana = median(p.drogas, na.rm = T), IQR = IQR(p.drogas, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Álcool, tabagismo ou drogas, total dos estratos") %>% kable_classic()
+
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(média = mean(TB_HIV, na.rm = T), desvio = sd(TB_HIV, na.rm = T), mediana = median(TB_HIV, na.rm = T), IQR = IQR(TB_HIV, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "HIV, por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(média = mean(TB_HIV, na.rm = T), desvio = sd(TB_HIV, na.rm = T), mediana = median(TB_HIV, na.rm = T), IQR = IQR(TB_HIV, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "HIV, total dos estratos") %>% kable_classic()
+
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(média = mean(TB_DB, na.rm = T), desvio = sd(TB_DB, na.rm = T), mediana = median(TB_DB, na.rm = T), IQR = IQR(TB_DB, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Diabetes, por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(média = mean(TB_DB, na.rm = T), desvio = sd(TB_DB, na.rm = T), mediana = median(TB_DB, na.rm = T), IQR = IQR(TB_DB, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Diabetes, total dos estratos") %>% kable_classic()
+
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(média = mean(NU_IDADE_N, na.rm = T), desvio = sd(NU_IDADE_N, na.rm = T), mediana = median(NU_IDADE_N, na.rm = T), IQR = IQR(NU_IDADE_N, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Idade média , por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(média = mean(NU_IDADE_N, na.rm = T), desvio = sd(NU_IDADE_N, na.rm = T), mediana = median(NU_IDADE_N, na.rm = T), IQR = IQR(NU_IDADE_N, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Idade média , total dos estratos") %>% kable_classic()
+
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(média = mean(p.pop_vuln, na.rm = T), desvio = sd(p.pop_vuln, na.rm = T), mediana = median(p.pop_vuln, na.rm = T), IQR = IQR(p.pop_vuln, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "População vulnerável , por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(média = mean(p.pop_vuln, na.rm = T), desvio = sd(p.pop_vuln, na.rm = T), mediana = median(p.pop_vuln, na.rm = T), IQR = IQR(p.pop_vuln, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "População vulnerável , total dos estratos") %>% kable_classic()
+
+df_final4 %>% group_by(estrato_pop6, cluster) %>% summarise(média = mean(media_mor_total, na.rm = T), desvio = sd(media_mor_total, na.rm = T), mediana = median(media_mor_total, na.rm = T), IQR = IQR(media_mor_total, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Média de moradores por domicílio , por grupo") %>% kable_classic()
+df_final4 %>% group_by(estrato_pop6) %>% summarise(média = mean(media_mor_total, na.rm = T), desvio = sd(media_mor_total, na.rm = T), mediana = median(media_mor_total, na.rm = T), IQR = IQR(media_mor_total, na.rm = T)) %>% kable(digits = c(1,1,1,1), caption = "Média de moradores por domicílio , total dos estratos") %>% kable_classic()
+
+
+
+
+
+#esquisse::esquisser(df_final4)
+
+
+
+library(ggplot2)
+
+ggplot(df_final4) +
+ aes(x = cluster, y = media_mor_total, fill = cluster) +
+ geom_boxplot() +
+stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ scale_fill_hue() +
+ coord_flip() +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), vars())
+
+ggplot(df_final4) +
+ aes(x = cluster, y = NU_IDADE_N, fill = cluster) +
+ geom_boxplot() +
+stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ scale_fill_hue() +
+ coord_flip() +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), vars())
+
+
+ggplot(df_final4) +
+ aes(x = cluster, y = p.drogas, fill = cluster) +
+ geom_boxplot() +
+stat_summary(fun=mean, geom="point", shape=20, size=3, color="#3C3C3C", fill="white") +
+ scale_fill_hue() +
+ coord_flip() +
+ theme_minimal() +
+ facet_grid(vars(estrato_pop6), vars())
+
+
+
+
+
+```
+```{r}
+#código julia pra salvar o gráfico 
+ggsave("nome.tiff", plot = last_plot(), units="cm", width=8.5, height=11, dpi=300)
+#1. roda o grafico (com legenda)
+#2. ##Obter legenda comum a todos
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(graphcomlegenda)
+#3. roda o grafico sem legenda
+
+library(grid)
+library(gridExtra)
+
+p <- arrangeGrob(trabalho_domicilio, transito_domicilio, parques_domicilio, 
+                        essenciais_domicilio, recreacao_domicilio, domicilio, legend, 
+                        ncol=4, widths=c(3,3,3,2),
+                        layout_matrix = cbind(c(1,2), c(3,4), c(5,6),c(7,7)))
+grid.draw(p)
+```
+
+```{r eval=FALSE, include=FALSE}
+#mapinha
+library(geobr)
+library(sf)
+
+regi <- read_region()
+states <- read_state(year=2019)
+
+no_axis <- theme(axis.title=element_blank(),
+                   axis.text=element_blank(),
+                   axis.ticks=element_blank())
+
+ggplot() +
+    geom_sf(data=states, fill="#2D3E50", color="#FEBF57", size=.15, show.legend = FALSE) +
+    labs(subtitle="States", size=8) +
+    theme_minimal() +
+    no_axis
+
+ggplot() +
+    geom_sf(data=regi, fill="#2D3E50", color="#FEBF57", size=.15, show.legend = FALSE) +
+    labs(subtitle="Regiões", size=8) +
+    theme_minimal() +
+    no_axis
+
+#levels(tab_regiao$Região) <- c("Centro Oeste", "Nordeste", "Norte", "Sudeste", "Sul")
+#tab_regiao$Região <- ordered(tab_regiao$Região,
+ #                        levels = c("Norte", "Nordeste", "Sudeste", "Sul", "Centro Oeste"))
+
+#tab_regiao$code <- c(4, 2, 5, 1, 3)
+#regi <- merge(regi, tab_regiao, by.x = "code_region", by.y = "code")
+#regi$pAcat <- cut(regi$pA, breaks = seq(0, 100, by=10))
+#regi$pBcat <- cut(regi$pB, breaks = seq(0, 100, by=10))
+#regi$pCcat <- cut(regi$pC, breaks = seq(0, 100, by=10))
+
+# g1 <- ggplot() +
+#     geom_sf(data=regi, aes(fill=pAcat), color=NA, size=.15) +
+#     labs(subtitle=" ", size=8, fill = "Grupo A \n(%)") +
+#     theme_minimal() +
+#     no_axis
+# 
+# g2 <- ggplot() +
+#     geom_sf(data=regi, aes(fill=pBcat), color=NA, size=.15) +
+#     labs(subtitle=" ", size=8, fill = "Grupo B \n(%)") +
+#     theme_minimal() +
+#     no_axis
+# 
+# g3 <- ggplot() +
+#     geom_sf(data=regi, aes(fill=pCcat), color=NA, size=.15) +
+#     labs(subtitle=" ", size=8, fill = "Grupo C \n(%)") +
+#     theme_minimal() +
+#     no_axis
+# 
+# ggplot() +
+#     geom_sf(data=regi, aes(fill=pCcat), color=NA, size=.15) +
+#     geom_scatterpie(aes(group=Total)) + 
+#     labs(subtitle=" ", size=8, fill = "Grupo C \n(%)") +
+#     theme_minimal() +
+#     no_axis
+
+# a <- df_final4 %>% group_by(Região, clusters_restr4) %>% summarise(n = n())
+# a <- a %>% group_by(Região) %>% mutate(total = sum(n), perc=n/total)
+# 
+# ggplot(a, aes(x = Região, y = perc, fill = clusters_restr4, label = scales::percent(perc) )) +
+#   geom_col() +
+#   geom_text(position = position_stack(vjust=0.5), size = 3, color = "gray30") +
+#   scale_fill_manual(values = c("#00AFBB", "#E7B800", "#FC4E07")) + 
+#   labs(y = "Percentual", fill = "Grupo") 
+  
+  
+
+# grid.arrange(g1, g2, g3, ncol = 3)
+#glimpse(banco_mapa)
+
+
+
+df <- select(df_final4, ID_MUNIC_A, UF, `Nome da UF`, `Nome do Município`, `Região`, estrato_pop6, cluster, LPA, pop2018)
+
+munic <- read_municipality()
+
+ggplot() +
+    geom_sf(data=munic, fill="#2D3E50", color="#FEBF57", size=.15, show.legend = FALSE) +
+    labs(subtitle="Regiões", size=8) +
+    theme_minimal() +
+    no_axis
+
+munic$code_muni2 <- as.numeric(str_sub(munic$code_muni, 1, 6))
+
+munic <- merge(munic, df, by.x = "code_muni2", by.y = "ID_MUNIC_A")
+
+g1 <- ggplot() +
+    geom_sf(data=munic, aes(fill=cluster), color=NA, size=.15) +
+    labs(subtitle=" ", size=8, fill = "Grupo") +
+    theme_minimal() +
+    no_axis
+
+# g2 <- ggplot() +
+#     geom_sf(data=munic, color=NA, size=.15) +
+#     geom_point(data = munic, aes(x = longitude, y = latitude, fill= munic$cluster, size = munic$pop2018)) +
+#     labs(subtitle=" ", size=8, fill = "Grupo") +
+#     theme_minimal() +
+#     no_axis
+
+# ggplot() +
+#     geom_sf(data=munic, color=NA, size=.15) +
+#     geom_point(data = munic, aes(fill=cluster, size = pop2018)) +
+#     labs(subtitle=" ", size=8, fill = "Grupo A \n(%)") +
+#     scale_x_continuous(#breaks = c(170, 175)
+#       ) + 
+#     theme_minimal() +
+#     no_axis
+
+levels(munic$estrato_pop6) <- c("< 50 \nmil hab.",    "50-100 \nmil hab.", 
+"100-300 \nmil hab.", "> 300 \nmil hab." )
+
+ggplot(munic) + 
+  geom_sf(data=munic, color=NA, size=.15) +
+  scale_color_manual(values=c("#0597F2", "#F5BB1D", "#D92949")) +
+  stat_sf_coordinates(aes(size=estrato_pop6, #fill = cluster, 
+                          color = cluster), alpha = 0.7) + 
+  guides(colour = guide_legend(override.aes = list(shape = 15, size = 5))) + 
+  theme_minimal() +
+  labs(color = "Grupo", size = "Estrato") +
+  no_axis
+
+br <- read_country()
+
+bubble <- ggplot(munic) + 
+  geom_sf(data = br, fill = NA, color = "gray") + 
+  geom_sf(data = munic, color = NA, size=.15, show.legend = F#, fill = "gray30"
+          ) +
+  scale_color_manual(values = c("#0597F2", "#F5BB1D", "#D92949")) +
+  stat_sf_coordinates(aes(#fill = cluster, 
+                          color = cluster), alpha = 0.7) +
+  facet_wrap(vars(estrato_pop6)) +
+  guides(colour = guide_legend(override.aes = list(#shape = 15,
+    size = 3.5))) + 
+  theme_minimal() +
+  theme(panel.grid.major = element_blank()) +
+  labs(color = "Grupo", size = "Estrato", fill = "Municipios"
+       #, fill = "Municípios inclusos"
+       ) +
+  no_axis
+
+bubble2 <- ggplot(munic) + 
+  geom_sf(data = br, fill = NA, color = "gray") + 
+  geom_sf(data = munic, color = NA, size=.15, show.legend = F#, fill = "gray30"
+          ) +
+  scale_color_manual(values = c("#0597F2", "#F5BB1D", "#D92949")) +
+  stat_sf_coordinates(aes(#fill = cluster, 
+                          color = cluster), alpha = 0.7) +
+  facet_wrap(vars(estrato_pop6)) +
+  guides(colour = guide_legend(override.aes = list(#shape = 15,
+    size = 3.5))) + 
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        #legend.position = "none"
+        plot.margin=unit(c(0.1,-0.5,0.1,-0.5), "cm"),
+        legend.position = "bottom",
+        legend.key.size = unit(0.1, 'cm'),
+        legend.key.height = unit(0.1, 'cm'),
+        legend.key.width = unit(0.1, 'cm'),
+        legend.margin=margin(t = 0, b = 0, r = 0, l = 0, unit='cm')
+        ) +
+  labs(color = "Grupo", size = "Estrato", fill = "Municipios"
+       #, fill = "Municípios inclusos"
+       ) +
+  no_axis
+
+leg1 <- get_legend(bubble2)
+
+g1 <- bubble2 + theme(legend.position = "none")
+
+fake <- ggplot(as.data.frame(cbind(c(1:10), c(1:10), c(rep("Municípios incluídos \nno estudo",10))))) + aes(x = V1, y = V2, color = V3) +
+  geom_point() +
+  scale_color_manual(values=c("#EBEBEB", "#EBEBEB", "#EBEBEB")) +
+  labs(color = "") +
+  guides(colour = guide_legend(override.aes = list(shape = 15,
+    size = 5))) + 
+  theme_minimal() +
+  theme(plot.margin=unit(c(0.1,-0.5,0.1,-0.5), "cm"),
+        legend.position = "bottom",
+        legend.key.size = unit(0.1, 'cm'),
+        legend.key.height = unit(0.1, 'cm'),
+        legend.key.width = unit(0.1, 'cm'),
+        legend.margin=margin(t = 0, b = 0, r = 0, l = 0, unit='cm')
+        )
+
+leg2 <- get_legend(fake)
+
+grid.arrange(arrangeGrob(g1, widths = c(1), heights =  c(1)), arrangeGrob(leg2, leg1, ncol = 2, widths = c(0.5,0.5), heights = c(0.5,0.5)),ncol=2, nrow = 2, 
+              layout_matrix = rbind(c(1,1), c(2,2)))
+
+grid.arrange(g1, arrangeGrob(leg2,leg1, ncol = 1), ncol = 2,
+#layout_matrix = rbind(c(1,1,2)),
+             widths = c(3, 0.5))
+
+grid.arrange(g1,leg1, ncol = 2, widths = c(0.9,0.1))
+
+grid.arrange(
+             arrangeGrob(g1, #left = text_grob("a. K-médias", 
+                         size = 16, x = unit(1, "npc"), y = unit(.979, "npc"))#)
+             ,
+             arrangeGrob(g1, #left = text_grob("b. APL        ", size = 16, x = unit(1, "npc"), y = unit(.979, "npc"))), 
+             legenda, ncol=2, nrow = 2, 
+             layout_matrix = rbind(c(1,2), c(3,3)),
+             widths = c(2.7, 2.7), heights = c(2.4, 0.3))
+
+             
+library(cowplot)             
+draw_plot(g1, leg1)
+ggdraw(plot_grid(g1, leg1))
+
+g1+leg2
+             
+ggsave("bubblemap4.jpg", bubble, dpi = 500, height = 7.3, width = 7.3)
+```
+
